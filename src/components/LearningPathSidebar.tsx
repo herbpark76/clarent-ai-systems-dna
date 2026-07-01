@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Clock } from 'lucide-react';
 import type { LearningPathDef } from '../data/learningPaths';
 import type { ProgressStatus } from '../data/roadmaps';
 import { CONCEPTS, CLUSTER_META } from '../data/concepts';
@@ -33,6 +33,10 @@ export default function LearningPathSidebar({ path, currentIndex, progress, onSe
   const completedCount = path.conceptIds.filter((id) => progress[id] === 'completed').length;
   const inProgressCount = path.conceptIds.filter((id) => progress[id] === 'in-progress').length;
   const progressPct = Math.round((completedCount / total) * 100);
+  const totalMinutes = path.conceptIds.reduce((sum, id) => {
+    const c = CONCEPTS.find((c) => c.id === id);
+    return sum + (c?.estimatedMinutes ?? 0);
+  }, 0);
 
   const canPrev = currentIndex > 0;
   const canNext = currentIndex < total - 1;
@@ -69,7 +73,15 @@ export default function LearningPathSidebar({ path, currentIndex, progress, onSe
               {path.level}
             </span>
             <h2 className="text-sm font-bold text-white leading-snug">{path.label}</h2>
-            <p className="text-xs text-white/35 mt-1 leading-relaxed line-clamp-2">{path.description}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs text-white/35 leading-relaxed line-clamp-1 flex-1">{path.description}</p>
+              {totalMinutes > 0 && (
+                <div className="flex-shrink-0 flex items-center gap-1 text-[10px] text-white/25">
+                  <Clock className="w-2.5 h-2.5" />
+                  {totalMinutes >= 60 ? `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m` : `${totalMinutes}m`}
+                </div>
+              )}
+            </div>
           </div>
           <button
             onClick={onExit}
@@ -270,6 +282,11 @@ export default function LearningPathSidebar({ path, currentIndex, progress, onSe
                   >
                     {concept.label}
                   </span>
+
+                  {/* Time estimate */}
+                  {concept.estimatedMinutes && (
+                    <span className="flex-shrink-0 text-[9px] text-white/20">{concept.estimatedMinutes}m</span>
+                  )}
 
                   {/* Current lesson indicator dot */}
                   {isCurrent && (

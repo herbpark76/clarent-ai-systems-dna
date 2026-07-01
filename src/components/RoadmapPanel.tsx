@@ -134,7 +134,12 @@ export default function RoadmapPanel({ roadmap, progress, onSetProgress, onSelec
                         {concept.label}
                       </span>
                     </div>
-                    <ChevronRight className="w-3 h-3 text-white/20 group-hover/btn:text-white/50 flex-shrink-0 transition-colors" />
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {concept.estimatedMinutes && (
+                        <span className="text-[9px] text-white/20">{concept.estimatedMinutes}m</span>
+                      )}
+                      <ChevronRight className="w-3 h-3 text-white/20 group-hover/btn:text-white/50 transition-colors" />
+                    </div>
                   </button>
                 </div>
               );

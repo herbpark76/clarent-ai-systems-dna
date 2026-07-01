@@ -312,9 +312,9 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
                     fill="none"
                     stroke={meta.stroke}
                     strokeWidth={1}
-                    strokeOpacity={0.4}
+                    strokeOpacity={0.6}
                     strokeDasharray="4 3"
-                    style={{ pointerEvents: 'none' }}
+                    style={{ pointerEvents: 'none', animation: 'lesson-pulse 2s ease-in-out infinite' }}
                   />
                 )}
 
@@ -400,27 +400,37 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 flex gap-3 flex-wrap">
-        {(['foundation', 'knowledge', 'intelligence', 'production'] as const).map((c) => (
-          <div key={c} className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CLUSTER_META[c].stroke }} />
-            <span className="text-[10px] font-medium" style={{ color: CLUSTER_META[c].stroke, opacity: 0.7 }}>
-              {CLUSTER_META[c].label}
-            </span>
-          </div>
-        ))}
-        {inRoadmapMode && (
-          <>
-            <div className="flex items-center gap-1.5 ml-2">
-              <div className="w-2 h-2 rounded-full bg-amber-400" />
-              <span className="text-[10px] font-medium text-amber-300/70">In Progress</span>
+      <div className="absolute bottom-4 left-4">
+        <div
+          className="flex flex-wrap gap-x-3 gap-y-1.5 px-3 py-2 rounded-xl"
+          style={{
+            background: 'rgba(8,12,20,0.75)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            backdropFilter: 'blur(12px)',
+          }}
+        >
+          {(['foundation', 'knowledge', 'intelligence', 'production'] as const).map((c) => (
+            <div key={c} className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: CLUSTER_META[c].stroke }} />
+              <span className="text-[10px] font-medium" style={{ color: CLUSTER_META[c].stroke, opacity: 0.75 }}>
+                {CLUSTER_META[c].label}
+              </span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-[10px] font-medium text-green-300/70">Completed</span>
-            </div>
-          </>
-        )}
+          ))}
+          {inRoadmapMode && (
+            <>
+              <div className="w-px self-stretch bg-white/[0.08]" />
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span className="text-[10px] font-medium text-amber-300/75">In Progress</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                <span className="text-[10px] font-medium text-green-300/75">Completed</span>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Hint */}

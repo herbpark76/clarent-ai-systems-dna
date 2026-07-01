@@ -14,6 +14,7 @@ import LearningPathSidebar from './components/LearningPathSidebar';
 import { CONCEPTS } from './data/concepts';
 import { ROADMAPS, type ProgressStatus, type NextStep } from './data/roadmaps';
 import { LEARNING_PATH_DEFS } from './data/learningPaths';
+import CompletionScreen from './components/CompletionScreen';
 
 type AppMode = 'explore' | 'roadmap';
 
@@ -116,27 +117,57 @@ export default function App() {
   const [form, setForm] = useState({ name: '', email: '', learning_interest: '' });
   const [formState, setFormState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [formError, setFormError] = useState('');
+  const [showCompletion, setShowCompletion] = useState(false);
 
   const selectedRoadmap = selectedRoadmapId ? ROADMAPS.find((r) => r.id === selectedRoadmapId) ?? null : null;
   const activePathDef = activePath ? LEARNING_PATH_DEFS.find((p) => p.id === activePath.id) ?? null : null;
   const currentLessonId = activePathDef ? activePathDef.conceptIds[activePath!.index] ?? null : null;
 
+  // Completion screen data
+  const completionSource = activePathDef ?? selectedRoadmap;
+  const completionConceptIds = completionSource
+    ? ('conceptIds' in completionSource ? completionSource.conceptIds : [])
+    : [];
+  const completionName = completionSource
+    ? ('label' in completionSource ? completionSource.label : '')
+    : '';
+  const completionTotalMinutes = completionConceptIds.reduce((sum, id) => {
+    const c = CONCEPTS.find((c) => c.id === id);
+    return sum + (c?.estimatedMinutes ?? 0);
+  }, 0);
+
   // Persist progress
   useEffect(() => { saveProgress(progress); }, [progress]);
 
   const handleSetProgress = (id: string, status: ProgressStatus) => {
-    setProgress((prev) => ({ ...prev, [id]: status }));
+    const newProgress = { ...progress, [id]: status };
+    setProgress(newProgress);
 
-    // Auto-advance to next lesson when current lesson is marked completed
-    if (status === 'completed' && activePath) {
-      const pathDef = LEARNING_PATH_DEFS.find((p) => p.id === activePath.id);
-      if (pathDef && pathDef.conceptIds[activePath.index] === id) {
-        const nextIdx = activePath.index + 1;
-        if (nextIdx < pathDef.conceptIds.length) {
-          setTimeout(() => {
-            setActivePath((prev) => prev ? { ...prev, index: nextIdx } : null);
-            setSelectedId(null);
-          }, 700);
+    // Check if active path or roadmap is now fully completed
+    if (status === 'completed') {
+      if (activePath) {
+        const pathDef = LEARNING_PATH_DEFS.find((p) => p.id === activePath.id);
+        if (pathDef) {
+          const allDone = pathDef.conceptIds.every((cid) => (cid === id ? true : newProgress[cid] === 'completed'));
+          if (allDone) {
+            setTimeout(() => setShowCompletion(true), 600);
+            return;
+          }
+          // Auto-advance to next lesson
+          if (pathDef.conceptIds[activePath.index] === id) {
+            const nextIdx = activePath.index + 1;
+            if (nextIdx < pathDef.conceptIds.length) {
+              setTimeout(() => {
+                setActivePath((prev) => prev ? { ...prev, index: nextIdx } : null);
+                setSelectedId(null);
+              }, 700);
+            }
+          }
+        }
+      } else if (selectedRoadmap) {
+        const allDone = selectedRoadmap.conceptIds.every((cid) => (cid === id ? true : newProgress[cid] === 'completed'));
+        if (allDone) {
+          setTimeout(() => setShowCompletion(true), 600);
         }
       }
     }
@@ -564,6 +595,28 @@ export default function App() {
           )}
         </div>
       </section>
+
+      {/* Completion Screen */}
+      {showCompletion && (
+        <CompletionScreen
+          pathName={completionName}
+          conceptCount={completionConceptIds.length}
+          totalMinutes={completionTotalMinutes}
+          onExplore={() => {
+            setShowCompletion(false);
+            setActivePath(null);
+            setSelectedRoadmapId(null);
+            setMode('explore');
+          }}
+          onRestart={() => {
+            setShowCompletion(false);
+            setActivePath(null);
+            setSelectedRoadmapId(null);
+            setMode('explore');
+            document.getElementById('learning-paths')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
+      )}
 
       {/* FOOTER */}
       <footer className="border-t border-white/[0.05] py-8">

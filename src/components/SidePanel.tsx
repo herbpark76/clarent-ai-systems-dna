@@ -1,4 +1,4 @@
-import { X, ChevronRight, ArrowRight, AlertTriangle, Lightbulb, ArrowUpRight } from 'lucide-react';
+import { X, ChevronRight, ArrowRight, AlertTriangle, Lightbulb, ArrowUpRight, Clock } from 'lucide-react';
 import { CONCEPTS, CLUSTER_META } from '../data/concepts';
 import type { ProgressStatus, NextStep } from '../data/roadmaps';
 
@@ -66,6 +66,12 @@ export default function SidePanel({ selectedId, onClose, onNavigate, progress, o
                   {CLUSTER_META[concept.cluster].label}
                 </div>
                 <h2 className="text-xl font-bold text-white leading-tight">{concept.label}</h2>
+                {concept.estimatedMinutes && (
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <Clock className="w-3 h-3 text-white/25" />
+                    <span className="text-[10px] text-white/30">~{concept.estimatedMinutes} min read</span>
+                  </div>
+                )}
               </div>
               <button
                 onClick={onClose}
