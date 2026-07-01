@@ -126,6 +126,20 @@ export default function App() {
 
   const handleSetProgress = (id: string, status: ProgressStatus) => {
     setProgress((prev) => ({ ...prev, [id]: status }));
+
+    // Auto-advance to next lesson when current lesson is marked completed
+    if (status === 'completed' && activePath) {
+      const pathDef = LEARNING_PATH_DEFS.find((p) => p.id === activePath.id);
+      if (pathDef && pathDef.conceptIds[activePath.index] === id) {
+        const nextIdx = activePath.index + 1;
+        if (nextIdx < pathDef.conceptIds.length) {
+          setTimeout(() => {
+            setActivePath((prev) => prev ? { ...prev, index: nextIdx } : null);
+            setSelectedId(null);
+          }, 700);
+        }
+      }
+    }
   };
 
   const handleSelectMode = (m: AppMode) => {
@@ -336,6 +350,8 @@ export default function App() {
         <LearningPathSidebar
           path={activePathDef}
           currentIndex={activePath!.index}
+          progress={progress}
+          onSetProgress={handleSetProgress}
           onNavigate={handlePathNavigate}
           onExit={() => { setActivePath(null); setSelectedId(null); }}
         />
@@ -349,7 +365,7 @@ export default function App() {
         progress={progress}
         onSetProgress={handleSetProgress}
         nextRecommended={getNextRecommended()}
-        inRoadmapMode={mode === 'roadmap' && selectedRoadmap !== null}
+        showProgressControls={(mode === 'roadmap' && selectedRoadmap !== null) || activePath !== null}
       />
 
       {/* QUICK CONCEPT TILES */}

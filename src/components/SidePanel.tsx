@@ -9,7 +9,7 @@ interface Props {
   progress: Record<string, ProgressStatus>;
   onSetProgress: (id: string, status: ProgressStatus) => void;
   nextRecommended: (NextStep & { label: string }) | null;
-  inRoadmapMode: boolean;
+  showProgressControls: boolean;
 }
 
 const PROGRESS_LABELS: Record<ProgressStatus, string> = {
@@ -33,7 +33,7 @@ const PROGRESS_STYLES: Record<ProgressStatus, { active: string; dot: string }> =
   },
 };
 
-export default function SidePanel({ selectedId, onClose, onNavigate, progress, onSetProgress, nextRecommended, inRoadmapMode }: Props) {
+export default function SidePanel({ selectedId, onClose, onNavigate, progress, onSetProgress, nextRecommended, showProgressControls }: Props) {
   const concept = selectedId ? CONCEPTS.find((c) => c.id === selectedId) ?? null : null;
   const meta = concept ? CLUSTER_META[concept.cluster] : null;
   const currentProgress = concept ? (progress[concept.id] ?? 'not-started') : 'not-started';
@@ -79,8 +79,8 @@ export default function SidePanel({ selectedId, onClose, onNavigate, progress, o
           {/* Scrollable content */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
 
-            {/* Progress tracker (roadmap mode only) */}
-            {inRoadmapMode && (
+            {/* Progress tracker (roadmap or learning path mode) */}
+            {showProgressControls && (
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-2">
                   Your Progress
@@ -149,8 +149,8 @@ export default function SidePanel({ selectedId, onClose, onNavigate, progress, o
               </div>
             </div>
 
-            {/* Next Recommended Step (roadmap mode) */}
-            {inRoadmapMode && nextRecommended && (
+            {/* Next Recommended Step (roadmap mode only) */}
+            {showProgressControls && nextRecommended && (
               <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07]">
                 <div className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400/80 mb-2">
                   Next Recommended Step
