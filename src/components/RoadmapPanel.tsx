@@ -1,9 +1,11 @@
 import { Clock, BarChart2, ChevronRight, RotateCcw, ArrowDown } from 'lucide-react';
 import type { Roadmap, ProgressStatus } from '../data/roadmaps';
-import { CONCEPTS, CLUSTER_META } from '../data/concepts';
+import type { Concept } from '../data/concepts';
+import { CLUSTER_META } from '../data/concepts';
 
 interface Props {
   roadmap: Roadmap;
+  conceptsMap: Record<string, Concept>;
   progress: Record<string, ProgressStatus>;
   onSetProgress: (id: string, status: ProgressStatus) => void;
   onSelectConcept: (id: string) => void;
@@ -22,13 +24,13 @@ const STATUS_ICON: Record<ProgressStatus, { icon: string; style: string }> = {
   'completed': { icon: '✓', style: 'text-green-400' },
 };
 
-export default function RoadmapPanel({ roadmap, progress, onSetProgress, onSelectConcept, onBack }: Props) {
+export default function RoadmapPanel({ roadmap, conceptsMap, progress, onSetProgress, onSelectConcept, onBack }: Props) {
   const completedCount = roadmap.conceptIds.filter((id) => progress[id] === 'completed').length;
   const inProgressCount = roadmap.conceptIds.filter((id) => progress[id] === 'in-progress').length;
   const total = roadmap.conceptIds.length;
   const progressPct = Math.round((completedCount / total) * 100);
 
-  const getConcept = (id: string) => CONCEPTS.find((c) => c.id === id);
+  const getConcept = (id: string) => conceptsMap[id];
 
   function cycleProgress(id: string) {
     const current = progress[id] ?? 'not-started';

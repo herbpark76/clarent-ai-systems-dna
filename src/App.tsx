@@ -6,15 +6,16 @@ import {
   Map, Compass,
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import { loadContent, type ContentData } from './lib/contentService';
 import ConceptMap from './components/ConceptMap';
 import SidePanel from './components/SidePanel';
 import RoadmapPanel from './components/RoadmapPanel';
 import GoalSelector from './components/GoalSelector';
 import LearningPathSidebar from './components/LearningPathSidebar';
-import { CONCEPTS } from './data/concepts';
+import CompletionScreen from './components/CompletionScreen';
+import { CONCEPTS, EDGES } from './data/concepts';
 import { ROADMAPS, type ProgressStatus, type NextStep } from './data/roadmaps';
 import { LEARNING_PATH_DEFS } from './data/learningPaths';
-import CompletionScreen from './components/CompletionScreen';
 
 type AppMode = 'explore' | 'roadmap';
 
@@ -119,8 +120,20 @@ export default function App() {
   const [formError, setFormError] = useState('');
   const [showCompletion, setShowCompletion] = useState(false);
 
+  // Content loaded from Supabase (hardcoded data used as initial/fallback)
+  const [content, setContent] = useState<ContentData>({
+    concepts: CONCEPTS,
+    edges: EDGES,
+    learningPathDefs: LEARNING_PATH_DEFS,
+    conceptsMap: Object.fromEntries(CONCEPTS.map((c) => [c.id, c])),
+  });
+
+  useEffect(() => {
+    loadContent().then(setContent);
+  }, []);
+
   const selectedRoadmap = selectedRoadmapId ? ROADMAPS.find((r) => r.id === selectedRoadmapId) ?? null : null;
-  const activePathDef = activePath ? LEARNING_PATH_DEFS.find((p) => p.id === activePath.id) ?? null : null;
+  const activePathDef = activePath ? content.learningPathDefs.find((p) => p.id === activePath.id) ?? null : null;
   const currentLessonId = activePathDef ? activePathDef.conceptIds[activePath!.index] ?? null : null;
 
   // Completion screen data
@@ -132,7 +145,7 @@ export default function App() {
     ? ('label' in completionSource ? completionSource.label : '')
     : '';
   const completionTotalMinutes = completionConceptIds.reduce((sum, id) => {
-    const c = CONCEPTS.find((c) => c.id === id);
+    const c = content.conceptsMap[id];
     return sum + (c?.estimatedMinutes ?? 0);
   }, 0);
 
@@ -146,7 +159,7 @@ export default function App() {
     // Check if active path or roadmap is now fully completed
     if (status === 'completed') {
       if (activePath) {
-        const pathDef = LEARNING_PATH_DEFS.find((p) => p.id === activePath.id);
+        const pathDef = content.learningPathDefs.find((p) => p.id === activePath.id);
         if (pathDef) {
           const allDone = pathDef.conceptIds.every((cid) => (cid === id ? true : newProgress[cid] === 'completed'));
           if (allDone) {
@@ -183,7 +196,7 @@ export default function App() {
   };
 
   const handleActivateLearningPath = (pathId: string) => {
-    const def = LEARNING_PATH_DEFS.find((p) => p.id === pathId);
+    const def = content.learningPathDefs.find((p) => p.id === pathId);
     if (!def) return;
     setActivePath({ id: pathId, index: 0 });
     setSelectedId(null);
@@ -206,7 +219,7 @@ export default function App() {
     if (!selectedRoadmap || !selectedId) return null;
     const nextStep = selectedRoadmap.nextSteps[selectedId];
     if (!nextStep) return null;
-    const nextConcept = CONCEPTS.find((c) => c.id === nextStep.id);
+    const nextConcept = content.conceptsMap[nextStep.id];
     return nextConcept ? { ...nextStep, label: nextConcept.label } : null;
   };
 
@@ -356,6 +369,8 @@ export default function App() {
           style={{ maxWidth: '1400px', height: 'calc(100vh - 200px)', minHeight: '520px', maxHeight: '760px' }}
         >
           <ConceptMap
+            concepts={content.concepts}
+            edges={content.edges}
             selectedId={selectedId}
             onSelect={setSelectedId}
             roadmapConceptIds={roadmapConceptIds}
@@ -369,6 +384,7 @@ export default function App() {
       {showRoadmapPanel && (
         <RoadmapPanel
           roadmap={selectedRoadmap!}
+          conceptsMap={content.conceptsMap}
           progress={progress}
           onSetProgress={handleSetProgress}
           onSelectConcept={(id) => setSelectedId(id)}
@@ -380,6 +396,7 @@ export default function App() {
       {activePathDef && !showRoadmapPanel && (
         <LearningPathSidebar
           path={activePathDef}
+          conceptsMap={content.conceptsMap}
           currentIndex={activePath!.index}
           progress={progress}
           onSetProgress={handleSetProgress}
@@ -390,6 +407,7 @@ export default function App() {
 
       {/* Concept Side Panel */}
       <SidePanel
+        conceptsMap={content.conceptsMap}
         selectedId={selectedId}
         onClose={() => setSelectedId(null)}
         onNavigate={(id) => setSelectedId(id)}
@@ -441,7 +459,7 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {LEARNING_PATHS.map(({ id, icon: Icon, level, label, color, border, accent, badge, topics, description }) => {
               const isActive = activePath?.id === id;
-              const pathDef = LEARNING_PATH_DEFS.find((p) => p.id === id);
+              const pathDef = content.learningPathDefs.find((p) => p.id === id);
               return (
                 <button
                   key={id}

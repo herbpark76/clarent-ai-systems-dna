@@ -1,8 +1,10 @@
 import { X, ChevronRight, ArrowRight, AlertTriangle, Lightbulb, ArrowUpRight, Clock } from 'lucide-react';
-import { CONCEPTS, CLUSTER_META } from '../data/concepts';
+import { CLUSTER_META } from '../data/concepts';
+import type { Concept } from '../data/concepts';
 import type { ProgressStatus, NextStep } from '../data/roadmaps';
 
 interface Props {
+  conceptsMap: Record<string, Concept>;
   selectedId: string | null;
   onClose: () => void;
   onNavigate: (id: string) => void;
@@ -33,12 +35,12 @@ const PROGRESS_STYLES: Record<ProgressStatus, { active: string; dot: string }> =
   },
 };
 
-export default function SidePanel({ selectedId, onClose, onNavigate, progress, onSetProgress, nextRecommended, showProgressControls }: Props) {
-  const concept = selectedId ? CONCEPTS.find((c) => c.id === selectedId) ?? null : null;
+export default function SidePanel({ conceptsMap, selectedId, onClose, onNavigate, progress, onSetProgress, nextRecommended, showProgressControls }: Props) {
+  const concept = selectedId ? (conceptsMap[selectedId] ?? null) : null;
   const meta = concept ? CLUSTER_META[concept.cluster] : null;
   const currentProgress = concept ? (progress[concept.id] ?? 'not-started') : 'not-started';
 
-  const getLabel = (id: string) => CONCEPTS.find((c) => c.id === id)?.label ?? id;
+  const getLabel = (id: string) => conceptsMap[id]?.label ?? id;
 
   return (
     <div
@@ -182,7 +184,7 @@ export default function SidePanel({ selectedId, onClose, onNavigate, progress, o
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {concept.prerequisites.map((id) => {
-                    const prereqMeta = CLUSTER_META[CONCEPTS.find((c) => c.id === id)?.cluster ?? 'foundation'];
+                    const prereqMeta = CLUSTER_META[conceptsMap[id]?.cluster ?? 'foundation'];
                     return (
                       <button
                         key={id}
@@ -207,7 +209,7 @@ export default function SidePanel({ selectedId, onClose, onNavigate, progress, o
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {concept.unlocksNext.map((id) => {
-                    const nextMeta = CLUSTER_META[CONCEPTS.find((c) => c.id === id)?.cluster ?? 'foundation'];
+                    const nextMeta = CLUSTER_META[conceptsMap[id]?.cluster ?? 'foundation'];
                     return (
                       <button
                         key={id}

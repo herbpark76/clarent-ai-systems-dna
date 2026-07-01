@@ -1,10 +1,12 @@
 import { ChevronLeft, ChevronRight, X, Clock } from 'lucide-react';
 import type { LearningPathDef } from '../data/learningPaths';
 import type { ProgressStatus } from '../data/roadmaps';
-import { CONCEPTS, CLUSTER_META } from '../data/concepts';
+import type { Concept } from '../data/concepts';
+import { CLUSTER_META } from '../data/concepts';
 
 interface Props {
   path: LearningPathDef;
+  conceptsMap: Record<string, Concept>;
   currentIndex: number;
   progress: Record<string, ProgressStatus>;
   onSetProgress: (id: string, status: ProgressStatus) => void;
@@ -24,17 +26,17 @@ function cycleStatus(current: ProgressStatus): ProgressStatus {
   return 'not-started';
 }
 
-export default function LearningPathSidebar({ path, currentIndex, progress, onSetProgress, onNavigate, onExit }: Props) {
+export default function LearningPathSidebar({ path, conceptsMap, currentIndex, progress, onSetProgress, onNavigate, onExit }: Props) {
   const total = path.conceptIds.length;
   const currentId = path.conceptIds[currentIndex];
-  const currentConcept = CONCEPTS.find((c) => c.id === currentId);
+  const currentConcept = conceptsMap[currentId];
   const currentMeta = currentConcept ? CLUSTER_META[currentConcept.cluster] : null;
 
   const completedCount = path.conceptIds.filter((id) => progress[id] === 'completed').length;
   const inProgressCount = path.conceptIds.filter((id) => progress[id] === 'in-progress').length;
   const progressPct = Math.round((completedCount / total) * 100);
   const totalMinutes = path.conceptIds.reduce((sum, id) => {
-    const c = CONCEPTS.find((c) => c.id === id);
+    const c = conceptsMap[id];
     return sum + (c?.estimatedMinutes ?? 0);
   }, 0);
 
@@ -220,7 +222,7 @@ export default function LearningPathSidebar({ path, currentIndex, progress, onSe
         </div>
         <div className="space-y-1">
           {path.conceptIds.map((id, i) => {
-            const concept = CONCEPTS.find((c) => c.id === id);
+            const concept = conceptsMap[id];
             if (!concept) return null;
             const meta = CLUSTER_META[concept.cluster];
             const isCurrent = i === currentIndex;

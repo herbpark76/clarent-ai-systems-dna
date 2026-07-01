@@ -1,9 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
-import { CONCEPTS, EDGES, CLUSTER_META, type Concept } from '../data/concepts';
+import { CLUSTER_META, type Concept } from '../data/concepts';
+import type { Edge } from '../data/concepts';
 import type { ProgressStatus } from '../data/roadmaps';
 
 interface Props {
+  concepts: Concept[];
+  edges: Edge[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   roadmapConceptIds: string[] | null;
@@ -54,7 +57,7 @@ function buildEdgePath(x1: number, y1: number, x2: number, y2: number): string {
   return `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`;
 }
 
-export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, progress, currentLessonId }: Props) {
+export default function ConceptMap({ concepts, edges, selectedId, onSelect, roadmapConceptIds, progress, currentLessonId }: Props) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [vt, setVt] = useState({ x: 0, y: 0, k: 1 });
 
@@ -63,7 +66,7 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
   const lastMouse = useRef({ x: 0, y: 0 });
   const dragDist = useRef(0);
 
-  const conceptMap = Object.fromEntries(CONCEPTS.map((c) => [c.id, c]));
+  const conceptMap = Object.fromEntries(concepts.map((c) => [c.id, c]));
   const activeId = hoveredId ?? selectedId;
   const inRoadmapMode = roadmapConceptIds !== null;
 
@@ -189,7 +192,7 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
               <stop offset="100%" stopColor={CLUSTER_META[c].glow} stopOpacity="0" />
             </radialGradient>
           ))}
-          {CONCEPTS.map((c) => (
+          {concepts.map((c) => (
             <radialGradient key={`g-${c.id}`} id={`glow-${c.id}`} cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor={CLUSTER_META[c.cluster].glow} stopOpacity="0.9" />
               <stop offset="100%" stopColor={CLUSTER_META[c.cluster].glow} stopOpacity="0" />
@@ -229,8 +232,7 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
             </text>
           ))}
 
-          {/* Edges */}
-          {EDGES.map((edge) => {
+          {edges.map((edge) => {
             const fromNode = conceptMap[edge.from];
             const toNode = conceptMap[edge.to];
             if (!fromNode || !toNode) return null;
@@ -260,7 +262,7 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
           })}
 
           {/* Nodes */}
-          {CONCEPTS.map((node) => {
+          {concepts.map((node) => {
             const state = getNodeState(node.id);
             const meta = CLUSTER_META[node.cluster];
             const isSelected = node.id === selectedId;
