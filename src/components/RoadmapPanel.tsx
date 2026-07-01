@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, BarChart2, ChevronRight, RotateCcw, ArrowDown } from 'lucide-react';
+import { Clock, BarChart2, ChevronRight, RotateCcw, ArrowDown } from 'lucide-react';
 import type { Roadmap, ProgressStatus } from '../data/roadmaps';
 import { CONCEPTS, CLUSTER_META } from '../data/concepts';
 

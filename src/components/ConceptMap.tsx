@@ -8,6 +8,7 @@ interface Props {
   onSelect: (id: string | null) => void;
   roadmapConceptIds: string[] | null;
   progress: Record<string, ProgressStatus>;
+  currentLessonId: string | null;
 }
 
 const VB_W = 1260;
@@ -53,7 +54,7 @@ function buildEdgePath(x1: number, y1: number, x2: number, y2: number): string {
   return `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`;
 }
 
-export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, progress }: Props) {
+export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, progress, currentLessonId }: Props) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [vt, setVt] = useState({ x: 0, y: 0, k: 1 });
 
@@ -66,10 +67,11 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
   const activeId = hoveredId ?? selectedId;
   const inRoadmapMode = roadmapConceptIds !== null;
 
-  function getNodeState(id: string): 'selected' | 'highlighted' | 'roadmap' | 'dimmed' | 'default' {
+  function getNodeState(id: string): 'selected' | 'current-lesson' | 'highlighted' | 'roadmap' | 'dimmed' | 'default' {
     if (inRoadmapMode) {
       const inRoadmap = roadmapConceptIds!.includes(id);
       if (!inRoadmap) return 'dimmed';
+      if (id === currentLessonId) return 'current-lesson';
       if (!activeId) return 'roadmap';
       if (id === activeId) return 'selected';
       const active = conceptMap[activeId];
@@ -263,6 +265,7 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
             const meta = CLUSTER_META[node.cluster];
             const isSelected = node.id === selectedId;
             const isHovered = node.id === hoveredId;
+            const isCurrentLesson = state === 'current-lesson';
             const isActive = isSelected || isHovered;
             const nodeProgress = progress[node.id];
             const isCompleted = nodeProgress === 'completed';
@@ -272,15 +275,18 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
               state === 'dimmed' ? 0.12
               : state === 'roadmap' ? 0.9
               : 1;
-            const strokeWidth = isActive ? 1.8 : state === 'roadmap' ? 1.5 : 1;
-            const strokeOpacity = isActive ? 1 : state === 'highlighted' ? 0.75 : state === 'roadmap' ? 0.7 : 0.45;
-            const scale = isActive ? 1.06 : 1;
+            const strokeWidth = isActive ? 1.8 : isCurrentLesson ? 2 : state === 'roadmap' ? 1.5 : 1;
+            const strokeOpacity = isActive ? 1 : isCurrentLesson ? 1 : state === 'highlighted' ? 0.75 : state === 'roadmap' ? 0.7 : 0.45;
+            const scale = isActive ? 1.06 : isCurrentLesson ? 1.1 : 1;
             const hw = NODE_W / 2;
             const hh = NODE_H / 2;
 
-            // Override fill/stroke for completed nodes
-            const nodeFill = isCompleted ? 'rgba(34,197,94,0.18)' : meta.fill;
-            const nodeStroke = isCompleted ? '#22c55e' : isInProgress ? '#f59e0b' : meta.stroke;
+            const nodeFill = isCompleted ? 'rgba(34,197,94,0.18)'
+              : isCurrentLesson ? `${meta.glow}30`
+              : meta.fill;
+            const nodeStroke = isCompleted ? '#22c55e'
+              : isInProgress ? '#f59e0b'
+              : meta.stroke;
 
             return (
               <g
@@ -297,21 +303,40 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
                 onMouseEnter={() => setHoveredId(node.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
+                {/* Current lesson dashed outer ring */}
+                {isCurrentLesson && (
+                  <rect
+                    x={-hw - 7} y={-hh - 7}
+                    width={NODE_W + 14} height={NODE_H + 14}
+                    rx={16}
+                    fill="none"
+                    stroke={meta.stroke}
+                    strokeWidth={1}
+                    strokeOpacity={0.4}
+                    strokeDasharray="4 3"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                )}
+
                 {/* Completed glow */}
                 {isCompleted && (
-                  <ellipse
-                    cx={0} cy={0}
-                    rx={hw + 20} ry={hh + 16}
+                  <ellipse cx={0} cy={0} rx={hw + 20} ry={hh + 16}
                     fill="url(#glow-completed)"
                     style={{ pointerEvents: 'none', opacity: 0.5 }}
                   />
                 )}
 
+                {/* Current lesson glow */}
+                {isCurrentLesson && !isCompleted && (
+                  <ellipse cx={0} cy={0} rx={hw + 22} ry={hh + 18}
+                    fill={`url(#glow-${node.id})`}
+                    style={{ pointerEvents: 'none', opacity: 0.6 }}
+                  />
+                )}
+
                 {/* Active glow halo */}
-                {isActive && !isCompleted && (
-                  <ellipse
-                    cx={0} cy={0}
-                    rx={hw + 18} ry={hh + 14}
+                {isActive && !isCompleted && !isCurrentLesson && (
+                  <ellipse cx={0} cy={0} rx={hw + 18} ry={hh + 14}
                     fill={`url(#glow-${node.id})`}
                     style={{ pointerEvents: 'none', opacity: 0.6 }}
                   />
@@ -330,36 +355,27 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
                     style={{ transition: 'all 0.25s ease' }}
                   />
 
-                  {/* Label lines */}
                   {node.lines.length === 1 ? (
-                    <text
-                      x={0} y={0}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize="11.5"
-                      fontWeight="600"
-                      fill="white"
-                      fillOpacity={isActive ? 1 : 0.85}
-                      style={{ pointerEvents: 'none', transition: 'fill-opacity 0.2s ease' }}
-                    >
+                    <text x={0} y={0} textAnchor="middle" dominantBaseline="middle" fontSize="11.5" fontWeight="600" fill="white" fillOpacity={isActive || isCurrentLesson ? 1 : 0.85} style={{ pointerEvents: 'none', transition: 'fill-opacity 0.2s ease' }}>
                       {node.lines[0]}
                     </text>
                   ) : (
                     <>
-                      <text x={0} y={-8} textAnchor="middle" dominantBaseline="middle" fontSize="10.5" fontWeight="600" fill="white" fillOpacity={isActive ? 1 : 0.85} style={{ pointerEvents: 'none' }}>
+                      <text x={0} y={-8} textAnchor="middle" dominantBaseline="middle" fontSize="10.5" fontWeight="600" fill="white" fillOpacity={isActive || isCurrentLesson ? 1 : 0.85} style={{ pointerEvents: 'none' }}>
                         {node.lines[0]}
                       </text>
-                      <text x={0} y={9} textAnchor="middle" dominantBaseline="middle" fontSize="10.5" fontWeight="600" fill="white" fillOpacity={isActive ? 1 : 0.85} style={{ pointerEvents: 'none' }}>
+                      <text x={0} y={9} textAnchor="middle" dominantBaseline="middle" fontSize="10.5" fontWeight="600" fill="white" fillOpacity={isActive || isCurrentLesson ? 1 : 0.85} style={{ pointerEvents: 'none' }}>
                         {node.lines[1]}
                       </text>
                     </>
                   )}
 
-                  {/* Progress indicator dot (top-right) */}
                   {isCompleted ? (
                     <circle cx={hw - 8} cy={-hh + 8} r={4} fill="#22c55e" fillOpacity={0.9} />
                   ) : isInProgress ? (
                     <circle cx={hw - 8} cy={-hh + 8} r={4} fill="#f59e0b" fillOpacity={0.9} />
+                  ) : isCurrentLesson ? (
+                    <circle cx={hw - 8} cy={-hh + 8} r={4} fill={meta.stroke} fillOpacity={1} />
                   ) : (
                     <circle cx={hw - 8} cy={-hh + 8} r={3} fill={meta.stroke} fillOpacity={isActive ? 1 : 0.6} />
                   )}
@@ -408,14 +424,19 @@ export default function ConceptMap({ selectedId, onSelect, roadmapConceptIds, pr
       </div>
 
       {/* Hint */}
-      {!selectedId && !inRoadmapMode && (
+      {!selectedId && !inRoadmapMode && !currentLessonId && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-xs text-white/35 pointer-events-none">
           Click any node to explore · Scroll to zoom · Drag to pan
         </div>
       )}
-      {!selectedId && inRoadmapMode && (
+      {!selectedId && inRoadmapMode && !currentLessonId && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-xs text-white/35 pointer-events-none">
           Highlighted concepts are on your roadmap · Click to view details
+        </div>
+      )}
+      {currentLessonId && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-xs text-white/35 pointer-events-none">
+          Use Prev / Next in the sidebar to navigate · Click any node for details
         </div>
       )}
     </div>

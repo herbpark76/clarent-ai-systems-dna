@@ -10,8 +10,10 @@ import ConceptMap from './components/ConceptMap';
 import SidePanel from './components/SidePanel';
 import RoadmapPanel from './components/RoadmapPanel';
 import GoalSelector from './components/GoalSelector';
+import LearningPathSidebar from './components/LearningPathSidebar';
 import { CONCEPTS } from './data/concepts';
 import { ROADMAPS, type ProgressStatus, type NextStep } from './data/roadmaps';
+import { LEARNING_PATH_DEFS } from './data/learningPaths';
 
 type AppMode = 'explore' | 'roadmap';
 
@@ -25,6 +27,7 @@ const NAV_LINKS = [
 
 const LEARNING_PATHS = [
   {
+    id: 'beginner',
     icon: GraduationCap,
     level: 'Beginner',
     label: 'Understand the Basics',
@@ -36,6 +39,7 @@ const LEARNING_PATHS = [
     description: 'No background required. Understand what these systems are, why they matter, and how the pieces fit together.',
   },
   {
+    id: 'builder',
     icon: Wrench,
     level: 'Builder',
     label: 'Build AI-Powered Workflows',
@@ -47,6 +51,7 @@ const LEARNING_PATHS = [
     description: 'For developers ready to ship. Build your first RAG pipeline, wire up tool-calling agents, and handle memory.',
   },
   {
+    id: 'architect',
     icon: Layers,
     level: 'Architect',
     label: 'Design Production AI Systems',
@@ -58,6 +63,7 @@ const LEARNING_PATHS = [
     description: 'For engineers designing systems at scale. Covers evaluation, observability, orchestration, and production hardening.',
   },
   {
+    id: 'domain-builder',
     icon: Building2,
     level: 'Domain Platform Builder',
     label: 'Apply AI to Specialized Domains',
@@ -105,12 +111,15 @@ export default function App() {
   const [mode, setMode] = useState<AppMode>('explore');
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activePath, setActivePath] = useState<{ id: string; index: number } | null>(null);
   const [progress, setProgress] = useState<Record<string, ProgressStatus>>(loadProgress);
   const [form, setForm] = useState({ name: '', email: '', learning_interest: '' });
   const [formState, setFormState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [formError, setFormError] = useState('');
 
   const selectedRoadmap = selectedRoadmapId ? ROADMAPS.find((r) => r.id === selectedRoadmapId) ?? null : null;
+  const activePathDef = activePath ? LEARNING_PATH_DEFS.find((p) => p.id === activePath.id) ?? null : null;
+  const currentLessonId = activePathDef ? activePathDef.conceptIds[activePath!.index] ?? null : null;
 
   // Persist progress
   useEffect(() => { saveProgress(progress); }, [progress]);
@@ -124,6 +133,26 @@ export default function App() {
     if (m === 'explore') {
       setSelectedRoadmapId(null);
     }
+    setActivePath(null);
+    setSelectedId(null);
+  };
+
+  const handleActivateLearningPath = (pathId: string) => {
+    const def = LEARNING_PATH_DEFS.find((p) => p.id === pathId);
+    if (!def) return;
+    setActivePath({ id: pathId, index: 0 });
+    setSelectedId(null);
+    // Switch to explore mode so roadmap panel doesn't compete
+    setMode('explore');
+    setSelectedRoadmapId(null);
+    setTimeout(() => {
+      document.getElementById('system-map')?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
+
+  const handlePathNavigate = (index: number) => {
+    if (!activePath) return;
+    setActivePath({ ...activePath, index });
     setSelectedId(null);
   };
 
@@ -156,7 +185,10 @@ export default function App() {
   };
 
   const showRoadmapPanel = mode === 'roadmap' && selectedRoadmap !== null && selectedId === null;
-  const roadmapConceptIds = selectedRoadmap ? selectedRoadmap.conceptIds : null;
+  // Learning path active concept IDs take priority over roadmap mode
+  const roadmapConceptIds = activePathDef
+    ? activePathDef.conceptIds
+    : (selectedRoadmap ? selectedRoadmap.conceptIds : null);
 
   return (
     <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
@@ -283,6 +315,7 @@ export default function App() {
             onSelect={setSelectedId}
             roadmapConceptIds={roadmapConceptIds}
             progress={progress}
+            currentLessonId={currentLessonId}
           />
         </div>
       </section>
@@ -295,6 +328,16 @@ export default function App() {
           onSetProgress={handleSetProgress}
           onSelectConcept={(id) => setSelectedId(id)}
           onBack={() => setSelectedRoadmapId(null)}
+        />
+      )}
+
+      {/* Learning Path Sidebar (right side, behind SidePanel) */}
+      {activePathDef && !showRoadmapPanel && (
+        <LearningPathSidebar
+          path={activePathDef}
+          currentIndex={activePath!.index}
+          onNavigate={handlePathNavigate}
+          onExit={() => { setActivePath(null); setSelectedId(null); }}
         />
       )}
 
@@ -346,26 +389,47 @@ export default function App() {
               Learning Paths
             </div>
             <h2 className="text-3xl font-bold text-white mb-3">Learn at your level</h2>
-            <p className="text-white/40 max-w-md mx-auto text-sm">Four structured paths — from first-time learner to domain platform architect.</p>
+            <p className="text-white/40 max-w-md mx-auto text-sm">Four structured paths — click any card to activate it on the map and start learning.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {LEARNING_PATHS.map(({ icon: Icon, level, label, color, border, accent, badge, topics, description }) => (
-              <div key={level} className={`group p-6 rounded-2xl border ${border} bg-gradient-to-br ${color} hover:shadow-xl hover:shadow-black/30 transition-all duration-300`}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badge}`}>
-                    <Icon className="w-3 h-3" />{level}
+            {LEARNING_PATHS.map(({ id, icon: Icon, level, label, color, border, accent, badge, topics, description }) => {
+              const isActive = activePath?.id === id;
+              const pathDef = LEARNING_PATH_DEFS.find((p) => p.id === id);
+              return (
+                <button
+                  key={id}
+                  onClick={() => handleActivateLearningPath(id)}
+                  className={`group p-6 rounded-2xl border ${isActive ? border.replace('/30', '/60') : border} bg-gradient-to-br ${color} hover:shadow-xl hover:shadow-black/30 transition-all duration-300 text-left relative ${isActive ? 'ring-1 ring-white/20' : ''}`}
+                >
+                  {isActive && (
+                    <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-white/15 border border-white/20 text-[9px] font-semibold text-white/70 uppercase tracking-wide">
+                      Active
+                    </div>
+                  )}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badge}`}>
+                      <Icon className="w-3 h-3" />{level}
+                    </div>
+                    {!isActive && <ChevronRight className={`w-4 h-4 ${accent} opacity-0 group-hover:opacity-100 transition-opacity`} />}
                   </div>
-                  <ChevronRight className={`w-4 h-4 ${accent} opacity-0 group-hover:opacity-100 transition-opacity`} />
-                </div>
-                <h3 className="text-base font-bold text-white mb-2">{label}</h3>
-                <p className="text-sm text-white/45 leading-relaxed mb-4">{description}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {topics.map((t) => (
-                    <span key={t} className="px-2 py-0.5 rounded-md bg-white/[0.07] border border-white/[0.07] text-xs text-white/55">{t}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
+                  <h3 className="text-base font-bold text-white mb-2">{label}</h3>
+                  <p className="text-sm text-white/45 leading-relaxed mb-4">{description}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {topics.map((t) => (
+                      <span key={t} className="px-2 py-0.5 rounded-md bg-white/[0.07] border border-white/[0.07] text-xs text-white/55">{t}</span>
+                    ))}
+                  </div>
+                  {pathDef && (
+                    <div className="mt-4 pt-3 border-t border-white/[0.07] flex items-center justify-between">
+                      <span className="text-xs text-white/30">{pathDef.conceptIds.length} concepts</span>
+                      <span className={`text-xs font-medium ${accent}`}>
+                        {isActive ? 'In progress →' : 'Start path →'}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>
