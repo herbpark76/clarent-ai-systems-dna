@@ -1,4 +1,5 @@
-import { X, ChevronRight, ArrowRight, AlertTriangle, Lightbulb, ArrowUpRight, Clock } from 'lucide-react';
+import { X, ChevronRight, ArrowRight, AlertTriangle, Lightbulb, ArrowUpRight, Clock, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { CLUSTER_META } from '../data/concepts';
 import type { Concept } from '../data/concepts';
 import type { ProgressStatus, NextStep } from '../data/roadmaps';
@@ -82,6 +83,14 @@ export default function SidePanel({ conceptsMap, selectedId, onClose, onNavigate
                 <X className="w-4 h-4" />
               </button>
             </div>
+            <Link
+              to={`/concepts/${concept.id}`}
+              onClick={onClose}
+              className="inline-flex items-center gap-1 text-[10px] text-white/35 hover:text-white/70 transition-colors mt-2"
+            >
+              <ExternalLink className="w-2.5 h-2.5" />
+              Open full page
+            </Link>
           </div>
 
           {/* Scrollable content */}
