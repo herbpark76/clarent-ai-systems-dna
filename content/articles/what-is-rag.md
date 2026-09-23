@@ -8,8 +8,6 @@ concepts: [rag, embeddings, vector-databases, chunking, metadata, search, evalua
 updated: 2026-09-23
 ---
 
-# What is RAG?
-
 A large language model knows a lot, but it only knows what was in its training data. It doesn't know your contracts, your product catalog, last week's policy change, or the tax rules your company has configured for its ERP system. Ask about them and it will either say it doesn't know or, worse, give a confident answer that sounds right and isn't.
 
 **Retrieval-Augmented Generation (RAG)** fixes this by giving the model the right information at the moment it answers. Before the model responds, the system *retrieves* relevant passages from your own sources and puts them into the prompt. The model then *generates* an answer grounded in that material instead of relying on memory.
@@ -96,4 +94,4 @@ RAG isn't always the answer:
 - Use RAG for knowledge; use fine-tuning for behavior.
 - Measure retrieval and answer quality separately, on real questions.
 
-**Where to go next on the map:** [Embeddings](#embeddings) · [Chunking](#chunking) · [Search](#search) · [Evaluation](#evaluation)
+**Where to go next on the map:** [Embeddings](/concepts/embeddings) · [Chunking](/concepts/chunking) · [Search](/concepts/search) · [Evaluation](/concepts/evaluation)

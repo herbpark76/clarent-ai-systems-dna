@@ -124,7 +124,7 @@ export default function HomePage() {
   });
 
   useEffect(() => {
-    document.title = 'AI Systems DNA';
+    document.title = 'AI Systems DNA — Learn How Modern AI Systems Are Built | Clarent';
   }, []);
 
   useEffect(() => {
