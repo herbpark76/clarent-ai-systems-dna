@@ -2,7 +2,7 @@
 slug: what-is-rag
 title: What is RAG?
 category: Retrieval
-readTime: 8 min read
+readTime: 5 min read
 description: A complete guide to Retrieval-Augmented Generation — how it works, why it matters, and when to use it over fine-tuning.
 concepts: [rag, embeddings, vector-databases, chunking, metadata, search, evaluation]
 updated: 2026-09-23

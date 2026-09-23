@@ -74,12 +74,12 @@ const LEARNING_PATHS = [
 ];
 
 const DEEP_DIVES = [
-  { title: 'What is RAG?', category: 'Retrieval', color: 'border-emerald-500/30', tag: 'bg-emerald-500/15 text-emerald-300', description: 'A complete guide to Retrieval-Augmented Generation — how it works, why it matters, and when to use it over fine-tuning.', readTime: '8 min read' },
-  { title: 'What is MCP?', category: 'Protocols', color: 'border-orange-500/30', tag: 'bg-orange-500/15 text-orange-300', description: 'Model Context Protocol explained — the emerging standard that lets AI agents connect to any tool or data source.', readTime: '6 min read' },
-  { title: 'What are AI Agents?', category: 'Agents', color: 'border-yellow-500/30', tag: 'bg-yellow-500/15 text-yellow-300', description: 'How agents plan, reason, and act — breaking down the loop from goal to tool call to response.', readTime: '10 min read' },
-  { title: 'Vector DBs vs Knowledge Graphs', category: 'Data', color: 'border-teal-500/30', tag: 'bg-teal-500/15 text-teal-300', description: 'Two powerful ways to organize knowledge for AI. Understand the tradeoffs and when each architecture wins.', readTime: '9 min read' },
-  { title: 'How Tool Calling Works', category: 'Integration', color: 'border-red-500/30', tag: 'bg-red-500/15 text-red-300', description: 'A deep look at how LLMs invoke external functions — the mechanism behind every AI-powered integration.', readTime: '7 min read' },
-  { title: 'How to Evaluate AI Systems', category: 'Evaluation', color: 'border-sky-500/30', tag: 'bg-sky-500/15 text-sky-300', description: 'Practical frameworks for measuring accuracy, relevance, faithfulness, and safety in production AI systems.', readTime: '11 min read' },
+  { title: 'What is RAG?', category: 'Retrieval', color: 'border-emerald-500/30', tag: 'bg-emerald-500/15 text-emerald-300', description: 'A complete guide to Retrieval-Augmented Generation — how it works, why it matters, and when to use it over fine-tuning.', readTime: '5 min read' },
+  { title: 'What is MCP?', category: 'Protocols', color: 'border-orange-500/30', tag: 'bg-orange-500/15 text-orange-300', description: 'Model Context Protocol explained — the emerging standard that lets AI agents connect to any tool or data source.', readTime: '4 min read' },
+  { title: 'What are AI Agents?', category: 'Agents', color: 'border-yellow-500/30', tag: 'bg-yellow-500/15 text-yellow-300', description: 'How agents plan, reason, and act — breaking down the loop from goal to tool call to response.', readTime: '5 min read' },
+  { title: 'Vector DBs vs Knowledge Graphs', category: 'Data', color: 'border-teal-500/30', tag: 'bg-teal-500/15 text-teal-300', description: 'Two powerful ways to organize knowledge for AI. Understand the tradeoffs and when each architecture wins.', readTime: '5 min read' },
+  { title: 'How Tool Calling Works', category: 'Integration', color: 'border-red-500/30', tag: 'bg-red-500/15 text-red-300', description: 'A deep look at how LLMs invoke external functions — the mechanism behind every AI-powered integration.', readTime: '5 min read' },
+  { title: 'How to Evaluate AI Systems', category: 'Evaluation', color: 'border-sky-500/30', tag: 'bg-sky-500/15 text-sky-300', description: 'Practical frameworks for measuring accuracy, relevance, faithfulness, and safety in production AI systems.', readTime: '6 min read' },
 ];
 
 const INTEREST_OPTIONS = [
