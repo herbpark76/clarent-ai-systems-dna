@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Component } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Trash2, Send, RefreshCw,
@@ -113,9 +114,57 @@ function AuthGate({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 
+// ── Normalization helpers (defend against stringified JSON) ──
+function normalizeSteps(raw: any): Array<{ text: string; prompt?: string }> {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((s: any) => {
+      if (typeof s === 'string') return { text: s };
+      if (s && typeof s === 'object' && typeof s.text === 'string')
+        return { text: s.text, ...(s.prompt ? { prompt: String(s.prompt) } : {}) };
+      return null;
+    }).filter((s): s is { text: string; prompt?: string } => s !== null);
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return normalizeSteps(parsed);
+    } catch { /* not JSON */ }
+    const lines = raw.split(/\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length > 0) return lines.map((text) => ({ text }));
+  }
+  return [];
+}
+
+function normalizeStringArray(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter((s): s is string => typeof s === 'string');
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return normalizeStringArray(parsed);
+    } catch { /* not JSON */ }
+    return [raw];
+  }
+  return [];
+}
+
+function normalizeSources(raw: any): SourceObj[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter((s): s is SourceObj => s && typeof s === 'object');
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return normalizeSources(parsed);
+    } catch { /* not JSON */ }
+  }
+  return [];
+}
+
 // ── Sources display helper ─────────────────────────────
 function getSources(entry: SignalEntry): SourceObj[] {
-  if (entry.sources && entry.sources.length > 0) return entry.sources;
+  const fromSources = normalizeSources(entry.sources);
+  if (fromSources.length > 0) return fromSources;
   if (entry.source_name || entry.source_url || entry.source_date) {
     return [{ name: entry.source_name, date: entry.source_date, url: entry.source_url }];
   }
@@ -126,6 +175,30 @@ function getSourceDate(entry: SignalEntry): string | null {
   const sources = getSources(entry);
   if (sources.length > 0 && sources[0].date) return sources[0].date;
   return entry.source_date || null;
+}
+
+// ── Error Boundary ────────────────────────────────────
+class EntryCardBoundary extends Component<
+  { children: ReactNode; entryTitle: string },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err: Error) { console.error('[EntryCardBoundary]', err); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+            <span className="text-xs font-semibold text-red-400">Failed to render this entry</span>
+          </div>
+          <p className="text-xs text-white/40">{this.props.entryTitle}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // ── Entry Card ─────────────────────────────────────────
@@ -151,6 +224,9 @@ function EntryCard({
   const dupTarget = isPossibleDup ? allEntries.find((e) => e.id === entry.duplicate_of) : null;
   const sources = getSources(entry);
   const sourceDate = getSourceDate(entry);
+  const steps = normalizeSteps(entry.steps);
+  const tags = normalizeStringArray(entry.tags);
+  const roleTags = normalizeStringArray(entry.role_tags);
   const [showDupTarget, setShowDupTarget] = useState(false);
 
   const handleSave = async () => {
@@ -323,11 +399,11 @@ function EntryCard({
                     </div>
                   </div>
                 )}
-                {entry.steps && entry.steps.length > 0 && (
+                {steps.length > 0 && (
                   <div>
                     <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wide">Steps</span>
                     <ol className="mt-1 space-y-1">
-                      {entry.steps.map((s, i) => (
+                      {steps.map((s, i) => (
                         <li key={i} className="text-xs text-white/55 leading-relaxed">
                           <span className="text-white/30 mr-1">{i + 1}.</span> {s.text}
                           {s.prompt && <code className="block mt-0.5 ml-4 px-2 py-1 rounded bg-white/[0.05] text-[10px] text-cyan-300/80">{s.prompt}</code>}
@@ -345,18 +421,18 @@ function EntryCard({
                     {entry.price_output && <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">Out: {entry.price_output}</span>}
                   </div>
                 )}
-                {entry.tags && entry.tags.length > 0 && (
+                {tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {entry.tags.map((t) => (
+                    {tags.map((t) => (
                       <span key={t} className="px-1.5 py-0.5 rounded bg-white/[0.06] text-[10px] text-white/45 flex items-center gap-0.5">
                         <Tag className="w-2 h-2" /> {t}
                       </span>
                     ))}
                   </div>
                 )}
-                {entry.role_tags && entry.role_tags.length > 0 && (
+                {roleTags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {entry.role_tags.map((t) => (
+                    {roleTags.map((t) => (
                       <span key={t} className="px-1.5 py-0.5 rounded bg-amber-500/10 text-[10px] text-amber-300/80 flex items-center gap-0.5">
                         <Building2 className="w-2 h-2" /> {t}
                       </span>
@@ -784,9 +860,11 @@ export default function AdminSignalDesk() {
                 <div className="space-y-3">
                   {possibleDups.map((entry) => (
                     <div key={entry.id}>
+                      <EntryCardBoundary entryTitle={entry.title}>
                       <EntryCard entry={entry} onUpdate={handleUpdate} onDelete={handleDelete}
                         onMerge={handleMerge} onKeepSeparate={handleKeepSeparate} onDiscard={handleDiscard}
                         allEntries={entries} />
+                      </EntryCardBoundary>
                     </div>
                   ))}
                 </div>
@@ -820,9 +898,11 @@ export default function AdminSignalDesk() {
               <div className="space-y-3">
                 {normalDrafts.map((entry) => (
                   <div key={entry.id}>
+                    <EntryCardBoundary entryTitle={entry.title}>
                     <EntryCard entry={entry} onUpdate={handleUpdate} onDelete={handleDelete}
                       onMerge={handleMerge} onKeepSeparate={handleKeepSeparate} onDiscard={handleDiscard}
                       allEntries={entries} />
+                    </EntryCardBoundary>
                     <div className="flex items-center gap-2 mt-1.5 px-1">
                       <button onClick={() => handlePublish(entry.id)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/15 border border-green-500/30 text-green-300 text-xs font-semibold hover:bg-green-500/25 transition-all">

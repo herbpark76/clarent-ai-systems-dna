@@ -197,6 +197,32 @@ function extractPublishDate(html: string): string | null {
   return null;
 }
 
+// ── Normalize steps from various forms ─────────────────
+function normalizeSteps(raw: any): Array<{ text: string; prompt?: string }> {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .map((s: any) => {
+        if (typeof s === "string") return { text: s };
+        if (s && typeof s === "object" && typeof s.text === "string") {
+          return { text: s.text, ...(s.prompt ? { prompt: String(s.prompt) } : {}) };
+        }
+        return null;
+      })
+      .filter((s: any): s is { text: string; prompt?: string } => s !== null);
+  }
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return normalizeSteps(parsed);
+    } catch { /* not JSON */ }
+    // Split on newlines or numbered lines
+    const lines = raw.split(/\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length > 0) return lines.map((text) => ({ text }));
+  }
+  return [];
+}
+
 function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEntry | null {
   if (!raw.title || !raw.summary) return null;
   if (!VALID_TYPES.has(raw.type)) return null;
@@ -220,7 +246,7 @@ function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEn
     why_it_matters: raw.why_it_matters ? String(raw.why_it_matters) : null,
     how_its_built: raw.how_its_built ? String(raw.how_its_built) : null,
     business_angle: raw.business_angle ? String(raw.business_angle) : null,
-    steps: Array.isArray(raw.steps) ? raw.steps : [],
+    steps: normalizeSteps(raw.steps),
     tags: Array.isArray(raw.tags) ? raw.tags.slice(0, 10) : [],
     role_tags: Array.isArray(raw.role_tags) ? raw.role_tags.slice(0, 10) : [],
     model_name: raw.model_name || null,
@@ -498,7 +524,7 @@ Deno.serve(async (req: Request) => {
         why_it_matters: e.why_it_matters,
         how_its_built: e.how_its_built,
         business_angle: e.business_angle,
-        steps: JSON.stringify(e.steps || []),
+        steps: e.steps || [],
         tags: e.tags || [],
         role_tags: e.role_tags || [],
         model_name: e.model_name,
@@ -509,7 +535,7 @@ Deno.serve(async (req: Request) => {
         source_url: finalSourceUrl || e.source_url || null,
         source_name: finalSourceName,
         source_date: finalSourceDate,
-        sources: JSON.stringify([newSource]),
+        sources: [newSource],
         duplicate_of: isDup ? e.duplicate_of_id : null,
         duplicate_status: isDup ? "possible" : "none",
         status: "draft",
