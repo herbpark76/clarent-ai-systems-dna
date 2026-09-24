@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import ArticlePage from './components/ArticlePage';
 import ConceptPage from './components/ConceptPage';
+import AdminSignalDesk from './pages/AdminSignalDesk';
 
 export default function App() {
   return (
@@ -10,6 +11,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/articles/:slug" element={<ArticlePage />} />
         <Route path="/concepts/:slug" element={<ConceptPage />} />
+        <Route path="/admin/signal-desk" element={<AdminSignalDesk />} />
       </Routes>
     </BrowserRouter>
   );
