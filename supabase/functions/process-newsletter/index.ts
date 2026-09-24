@@ -8,6 +8,11 @@ const corsHeaders = {
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
+// Change this to switch the Claude model used for newsletter processing.
+const CLAUDE_MODEL = "claude-sonnet-4-20250514";
+
+const ADMIN_EMAIL = "hpark76@gmail.com";
+
 const SYSTEM_PROMPT = `You are an AI systems analyst for "Signal Desk" by Clarent, a learning platform that teaches how modern AI systems are built.
 
 You receive raw newsletter text and must extract individual AI news items, turning each into a structured learning entry.
@@ -95,6 +100,24 @@ Deno.serve(async (req: Request) => {
   try {
     const { text, source_name, source_date } = await req.json();
 
+    // ── Admin auth check ───────────────────────────────
+    // The edge function has verify_jwt = true, so Supabase already validates
+    // the JWT is well-formed. We additionally check the caller's email.
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.replace("Bearer ", "");
+    let callerEmail: string | null = null;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      callerEmail = payload.email ?? null;
+    } catch { /* malformed JWT — leave null */ }
+
+    if (callerEmail !== ADMIN_EMAIL) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized. Admin access required." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     if (!text || typeof text !== "string" || text.trim().length < 50) {
       return new Response(
         JSON.stringify({ error: "Text input is required (min 50 characters)." }),
@@ -118,7 +141,7 @@ Deno.serve(async (req: Request) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: CLAUDE_MODEL,
         max_tokens: 8000,
         system: SYSTEM_PROMPT,
         messages: [
