@@ -374,7 +374,7 @@ function EntryCard({
         ) : (
           <>
             <h3 className="text-sm font-bold text-white mb-1.5 leading-snug">{entry.title}</h3>
-            <p className="text-xs text-white/50 leading-relaxed line-clamp-2">{entry.summary}</p>
+            <p className={`text-xs text-white/50 leading-relaxed ${expanded ? '' : 'line-clamp-2'}`}>{entry.summary}</p>
 
             {expanded && (
               <div className="mt-3 space-y-2.5">

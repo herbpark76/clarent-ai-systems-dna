@@ -68,7 +68,7 @@ INSTRUCTIONS:
    - summary: 2-4 sentences summarizing the item IN YOUR OWN WORDS. Never copy text from the source.
    - why_it_matters: 1-2 sentences on significance for AI practitioners
    - how_its_built: 1-3 sentences on what this story reveals about how AI systems are built or where they break
-   - business_angle: 1-2 sentences on how this applies to a team running finance, tax, or ERP systems
+   - business_angle: Write for a finance, tax, or ERP leader. Be concrete and actionable: name the specific control, question, or decision they should make (e.g., service identities, credential vaults, approval thresholds, audit trails, vendor terms). Avoid generic advice like "should scrutinize" or "should consider". 1-2 sentences.
    - tags: array of 2-5 short lowercase tags
    - role_tags: array of relevant roles from: finance, legal, ops, marketing, IT (can be empty)
    - For tutorials ONLY: steps: array of { text, prompt? } objects where prompt is an optional example prompt string
@@ -159,22 +159,68 @@ function extractReadableText(html: string): string {
   return cleaned;
 }
 
-// ── Extract site name from URL ─────────────────────────
-function extractSiteName(url: string): string | null {
+// ── Extract site name from HTML or URL ────────────────
+// Prefers og:site_name or the page <title> publication name from HTML.
+// Falls back to a known-host map, then to the URL subdomain.
+function extractSiteName(url: string, html?: string): string | null {
+  // 1. Try og:site_name from HTML — the most reliable publication name
+  if (html) {
+    let match = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i);
+    if (match) return match[1].trim();
+
+    match = html.match(/<meta[^>]+name=["']application-name["'][^>]+content=["']([^"']+)["']/i);
+    if (match) return match[1].trim();
+
+    // For beehiiv/substack: the <title> often contains the publication name
+    // e.g. "The Rundown AI | AI News" or "Publication Name - beehiiv"
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+    if (titleMatch) {
+      const rawTitle = titleMatch[1].trim();
+      // Strip common suffixes like " | beehiiv", " - Substack", etc.
+      const cleaned = rawTitle
+        .replace(/\s*[\|\-]\s*(beehiiv|substack)\s*$/i, '')
+        .replace(/\s*[\|\-]\s*Issue\s*#?\d+.*$/i, '')
+        .trim();
+      if (cleaned.length > 0 && cleaned.length < 80 && !/beehiiv|substack/i.test(cleaned)) {
+        return cleaned;
+      }
+    }
+  }
+
+  // 2. Known hosting-domain → publication-name map
   try {
     const u = new URL(url);
     const host = u.hostname.replace(/^www\./, "");
     const parts = host.split(".");
     if (parts.length < 2) return host;
-    const base = parts[parts.length - 2];
+    const subdomain = parts[0].toLowerCase();
+    const base = parts[parts.length - 2].toLowerCase();
+
+    // Map known subdomains on hosting platforms to publication names
+    const subdomainMap: Record<string, string> = {
+      therundownai: "The Rundown AI",
+      tldr: "TLDR AI",
+      thebatch: "The Batch",
+      natter: "Natter",
+    };
+    if (subdomainMap[subdomain]) return subdomainMap[subdomain];
+
+    // If the base domain is a hosting platform, use the subdomain as the name
+    const hostingDomains = new Set(["beehiiv", "substack", "squarespace", "ghost"]);
+    if (hostingDomains.has(base) && subdomain !== "www" && subdomain.length > 0) {
+      return subdomain.charAt(0).toUpperCase() + subdomain.slice(1);
+    }
+
+    // Known base-domain map
     const known: Record<string, string> = {
       tldr: "TLDR AI",
       therundown: "The Rundown AI",
       thebatch: "The Batch",
       natter: "Natter",
     };
-    if (known[base.toLowerCase()]) return known[base.toLowerCase()];
-    return base.charAt(0).toUpperCase() + base.slice(1);
+    if (known[base]) return known[base];
+
+    return parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
   } catch {
     return null;
   }
@@ -333,7 +379,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      autoSourceName = extractSiteName(cleanedUrl);
+      autoSourceName = extractSiteName(cleanedUrl, html);
       autoSourceDate = extractPublishDate(html);
     } else if (text && typeof text === "string") {
       inputText = text;
