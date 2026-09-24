@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Trash2, Send, RefreshCw,
   Newspaper, AlertCircle, CheckCircle2, ExternalLink,
-  Layers, Tag, Briefcase, Building2, ChevronDown,
+  Layers, Tag, Briefcase, Building2, ChevronDown, Link2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -418,6 +418,7 @@ export default function AdminSignalDesk() {
   const [authChecked, setAuthChecked] = useState(false);
   const [entries, setEntries] = useState<SignalEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const [processUrl, setProcessUrl] = useState('');
   const [processText, setProcessText] = useState('');
   const [sourceName, setSourceName] = useState('');
   const [sourceDate, setSourceDate] = useState('');
@@ -457,8 +458,8 @@ export default function AdminSignalDesk() {
 
   // ── Process newsletter ───────────────────────────────
   const handleProcess = async () => {
-    if (!processText.trim() || processText.trim().length < 50) {
-      setProcessMsg({ type: 'error', text: 'Paste at least 50 characters of newsletter text.' });
+    if (!processUrl.trim() && (!processText.trim() || processText.trim().length < 50)) {
+      setProcessMsg({ type: 'error', text: 'Enter a newsletter URL or paste at least 50 characters of text.' });
       return;
     }
     setProcessing(true);
@@ -480,7 +481,8 @@ export default function AdminSignalDesk() {
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
-          text: processText,
+          url: processUrl.trim() || null,
+          text: processText.trim() || null,
           source_name: sourceName || null,
           source_date: sourceDate || null,
         }),
@@ -495,6 +497,7 @@ export default function AdminSignalDesk() {
           text: count > 0 ? `${count} entries extracted and saved as drafts.` : 'No valid entries found in the text.',
         });
         setProcessText('');
+        setProcessUrl('');
         loadEntries();
       }
     } catch {
@@ -587,7 +590,7 @@ export default function AdminSignalDesk() {
             <input
               value={sourceName}
               onChange={(e) => setSourceName(e.target.value)}
-              placeholder="Source name (e.g. TLDR AI, The Batch)"
+              placeholder="Source name (auto-filled from URL, override as needed)"
               className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm placeholder-white/20 focus:outline-none focus:border-blue-500/50 transition-all"
             />
             <input
@@ -595,6 +598,15 @@ export default function AdminSignalDesk() {
               value={sourceDate}
               onChange={(e) => setSourceDate(e.target.value)}
               className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm placeholder-white/20 focus:outline-none focus:border-blue-500/50 transition-all"
+            />
+          </div>
+          <div className="relative mb-3">
+            <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25" />
+            <input
+              value={processUrl}
+              onChange={(e) => setProcessUrl(e.target.value)}
+              placeholder="Newsletter URL (optional — we'll fetch and extract the text)"
+              className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm placeholder-white/20 focus:outline-none focus:border-blue-500/50 transition-all"
             />
           </div>
           <textarea

@@ -13,6 +13,8 @@ const CLAUDE_MODEL = "claude-sonnet-5";
 
 const ADMIN_EMAIL = "hpark76@gmail.com";
 
+const MIN_EXTRACTED_TEXT = 500;
+
 const SYSTEM_PROMPT = `You are an AI systems analyst for "Signal Desk" by Clarent, a learning platform that teaches how modern AI systems are built.
 
 You receive raw newsletter text and must extract individual AI news items, turning each into a structured learning entry.
@@ -67,6 +69,110 @@ const VALID_LAYERS = new Set([
   "evals", "security_governance", "interface",
 ]);
 
+// ── URL cleaning ───────────────────────────────────────
+function stripTrackingParams(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    const paramsToDelete: string[] = [];
+    u.searchParams.forEach((_v, key) => {
+      if (key.startsWith("utm_") || key === "_bhlid" || key === "_hsenc" || key === "_hsmi" || key === "mc_cid" || key === "mc_eid" || key === "ml_subscriber" || key === "ml_subscriber_hash") {
+        paramsToDelete.push(key);
+      }
+    });
+    paramsToDelete.forEach((p) => u.searchParams.delete(p));
+    return u.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+// ── HTML text extraction ───────────────────────────────
+function extractReadableText(html: string): string {
+  // Remove script, style, nav, footer, header, aside, form blocks entirely
+  let cleaned = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ")
+    .replace(/<aside[\s\S]*?<\/aside>/gi, " ")
+    .replace(/<form[\s\S]*?<\/form>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ");
+
+  // Convert headings and list items to text with line breaks
+  cleaned = cleaned
+    .replace(/<\/(h[1-6]|li|p|div|br|tr)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n");
+
+  // Keep link text (strip the tag, keep inner text)
+  // Remove all remaining tags
+  cleaned = cleaned.replace(/<[^>]+>/g, " ");
+
+  // Decode common HTML entities
+  cleaned = cleaned
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#x2F;/g, "/");
+
+  // Collapse whitespace
+  cleaned = cleaned
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return cleaned;
+}
+
+// ── Extract site name from URL ─────────────────────────
+function extractSiteName(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    // Use the second-to-last part of the domain as the site name
+    // e.g. "therundown.ai" -> "The Rundown AI", "tldr.tech" -> "TLDR"
+    const parts = host.split(".");
+    if (parts.length < 2) return host;
+    const base = parts[parts.length - 2];
+    // Simple heuristics for known newsletters
+    const known: Record<string, string> = {
+      tldr: "TLDR AI",
+      therundown: "The Rundown AI",
+      thebatch: "The Batch",
+      natter: "Natter",
+    };
+    if (known[base.toLowerCase()]) return known[base.toLowerCase()];
+    // Capitalize the base domain part
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  } catch {
+    return null;
+  }
+}
+
+// ── Extract publish date from HTML ─────────────────────
+function extractPublishDate(html: string): string | null {
+  // Try meta property="article:published_time"
+  let match = html.match(/<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["']/i);
+  if (match) return match[1].slice(0, 10);
+
+  // Try meta name="date" or name="publish_date"
+  match = html.match(/<meta[^>]+name=["'](?:date|publish_date|publication_date)["'][^>]+content=["']([^"']+)["']/i);
+  if (match) return match[1].slice(0, 10);
+
+  // Try <time datetime="...">
+  match = html.match(/<time[^>]+datetime=["']([^"']+)["']/i);
+  if (match) return match[1].slice(0, 10);
+
+  // Try JSON-LD datePublished
+  match = html.match(/"datePublished"\s*:\s*"([^"]+)"/);
+  if (match) return match[1].slice(0, 10);
+
+  return null;
+}
+
 function sanitizeEntry(raw: ProcessedEntry): ProcessedEntry | null {
   if (!raw.title || !raw.summary) return null;
   if (!VALID_TYPES.has(raw.type)) return null;
@@ -98,11 +204,9 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { text, source_name, source_date } = await req.json();
+    const { text, url, source_name, source_date } = await req.json();
 
-    // ── Admin auth check ───────────────────────────────
-    // The edge function has verify_jwt = true, so Supabase already validates
-    // the JWT is well-formed. We additionally check the caller's email.
+    // ── Admin auth check (before any fetch) ─────────────
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace("Bearer ", "");
     let callerEmail: string | null = null;
@@ -118,9 +222,71 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!text || typeof text !== "string" || text.trim().length < 50) {
+    // ── Determine input text ────────────────────────────
+    let inputText = "";
+    let cleanedUrl: string | null = null;
+    let autoSourceName: string | null = null;
+    let autoSourceDate: string | null = null;
+
+    if (url && typeof url === "string" && url.trim().length > 0) {
+      cleanedUrl = stripTrackingParams(url.trim());
+
+      if (!cleanedUrl.startsWith("http://") && !cleanedUrl.startsWith("https://")) {
+        return new Response(
+          JSON.stringify({ error: "URL must start with http:// or https://." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // Fetch the page server-side
+      let fetchResp: Response;
+      try {
+        fetchResp = await fetch(cleanedUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; SignalDesk/1.0; +https://aisystems.clarenttech.com)",
+            "Accept": "text/html,application/xhtml+xml",
+          },
+          redirect: "follow",
+        });
+      } catch {
+        return new Response(
+          JSON.stringify({ error: "Could not fetch the URL. Please paste the newsletter text instead." }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      if (!fetchResp.ok) {
+        return new Response(
+          JSON.stringify({ error: `Fetch failed (HTTP ${fetchResp.status}). Please paste the newsletter text instead.` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const html = await fetchResp.text();
+      inputText = extractReadableText(html);
+
+      if (inputText.length < MIN_EXTRACTED_TEXT) {
+        return new Response(
+          JSON.stringify({ error: `Extracted too little text (${inputText.length} chars). Please paste the newsletter text instead.` }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // Auto-fill source info from the page
+      autoSourceName = extractSiteName(cleanedUrl);
+      autoSourceDate = extractPublishDate(html);
+    } else if (text && typeof text === "string") {
+      inputText = text;
+    } else {
       return new Response(
-        JSON.stringify({ error: "Text input is required (min 50 characters)." }),
+        JSON.stringify({ error: "Provide either a URL or pasted text." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (inputText.trim().length < 50) {
+      return new Response(
+        JSON.stringify({ error: "Text input is too short (min 50 characters)." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -131,6 +297,10 @@ Deno.serve(async (req: Request) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
+    // ── Resolve source fields (user override > auto > null) ──
+    const finalSourceName = source_name || autoSourceName || null;
+    const finalSourceDate = source_date || autoSourceDate || null;
 
     // ── Call Claude ──────────────────────────────────────
     const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -147,7 +317,7 @@ Deno.serve(async (req: Request) => {
         messages: [
           {
             role: "user",
-            content: `Newsletter source: ${source_name || "Unknown"}\nDate: ${source_date || "Unknown"}\n\nNewsletter text:\n\n${text}`,
+            content: `Newsletter source: ${finalSourceName || "Unknown"}\nDate: ${finalSourceDate || "Unknown"}\n\nNewsletter text:\n\n${inputText}`,
           },
         ],
       }),
@@ -166,7 +336,6 @@ Deno.serve(async (req: Request) => {
 
     let parsed: { entries?: ProcessedEntry[] };
     try {
-      // Strip any markdown code fences if present
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
     } catch {
@@ -209,9 +378,10 @@ Deno.serve(async (req: Request) => {
       benchmark_score: e.benchmark_score,
       price_input: e.price_input,
       price_output: e.price_output,
-      source_url: e.source_url,
-      source_name: source_name || null,
-      source_date: source_date || null,
+      // Auto-fill source_url with the cleaned URL; fall back to any URL Claude found in the text
+      source_url: cleanedUrl || e.source_url || null,
+      source_name: finalSourceName,
+      source_date: finalSourceDate,
       status: "draft",
     }));
 
