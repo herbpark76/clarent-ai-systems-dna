@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
 
 // ── Types ──────────────────────────────────────────────
-type EntryType = 'news' | 'tutorial' | 'use_case' | 'tool' | 'model_release' | 'risk';
+type EntryType = 'news' | 'tutorial' | 'use_case' | 'tool' | 'model_release' | 'risk' | 'industry';
 type SystemLayer = 'model' | 'agent' | 'tools_connectors' | 'data_context' | 'evals' | 'security_governance' | 'interface';
 type DuplicateStatus = 'none' | 'possible' | 'merged' | 'separate' | 'discarded';
 
@@ -24,7 +24,7 @@ interface SignalEntry {
   id: string;
   created_at: string;
   type: EntryType;
-  system_layer: SystemLayer;
+  system_layer: SystemLayer | null;
   title: string;
   summary: string;
   why_it_matters: string | null;
@@ -49,7 +49,7 @@ interface SignalEntry {
 
 const TYPE_LABELS: Record<EntryType, string> = {
   news: 'News', tutorial: 'Tutorial', use_case: 'Use Case',
-  tool: 'Tool', model_release: 'Model Release', risk: 'Risk',
+  tool: 'Tool', model_release: 'Model Release', risk: 'Risk', industry: 'Industry',
 };
 const LAYER_LABELS: Record<SystemLayer, string> = {
   model: 'Model', agent: 'Agent', tools_connectors: 'Tools & Connectors',
@@ -63,6 +63,7 @@ const TYPE_COLORS: Record<EntryType, string> = {
   tool: 'border-orange-500/30 bg-orange-500/10 text-orange-300',
   model_release: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
   risk: 'border-red-500/30 bg-red-500/10 text-red-300',
+  industry: 'border-slate-400/30 bg-slate-400/10 text-slate-300',
 };
 const LAYER_COLORS: Record<SystemLayer, string> = {
   model: 'text-blue-400', agent: 'text-amber-400',
@@ -167,10 +168,12 @@ function EntryCard({
         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TYPE_COLORS[entry.type]}`}>
           {TYPE_LABELS[entry.type]}
         </span>
-        <span className={`text-[10px] font-medium flex items-center gap-1 ${LAYER_COLORS[entry.system_layer]}`}>
-          <Layers className="w-2.5 h-2.5" />
-          {LAYER_LABELS[entry.system_layer]}
-        </span>
+        {entry.system_layer && (
+          <span className={`text-[10px] font-medium flex items-center gap-1 ${LAYER_COLORS[entry.system_layer]}`}>
+            <Layers className="w-2.5 h-2.5" />
+            {LAYER_LABELS[entry.system_layer]}
+          </span>
+        )}
         {isPossibleDup && (
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300">
             Possible duplicate
@@ -225,8 +228,9 @@ function EntryCard({
               </label>
               <label className="block">
                 <span className="text-[10px] text-white/40 mb-1 block">System Layer</span>
-                <select value={draft.system_layer} onChange={(e) => setDraft({ ...draft, system_layer: e.target.value as SystemLayer })}
+                <select value={draft.system_layer || ''} onChange={(e) => setDraft({ ...draft, system_layer: (e.target.value || null) as SystemLayer | null })}
                   className="w-full px-2.5 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500/50">
+                  <option value="" className="bg-[#0f1523]">— None (industry) —</option>
                   {Object.entries(LAYER_LABELS).map(([v, l]) => <option key={v} value={v} className="bg-[#0f1523]">{l}</option>)}
                 </select>
               </label>
@@ -357,8 +361,9 @@ function EntryCard({
                 className="px-2 py-1 rounded-md bg-white/[0.05] border border-white/10 text-white text-[10px] focus:outline-none focus:border-blue-500/50">
                 {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v} className="bg-[#0f1523]">{l}</option>)}
               </select>
-              <select value={entry.system_layer} onChange={(e) => onUpdate(entry.id, { system_layer: e.target.value as SystemLayer })}
+              <select value={entry.system_layer || ''} onChange={(e) => onUpdate(entry.id, { system_layer: (e.target.value || null) as SystemLayer | null })}
                 className="px-2 py-1 rounded-md bg-white/[0.05] border border-white/10 text-white text-[10px] focus:outline-none focus:border-blue-500/50">
+                <option value="" className="bg-[#0f1523]">— None —</option>
                 {Object.entries(LAYER_LABELS).map(([v, l]) => <option key={v} value={v} className="bg-[#0f1523]">{l}</option>)}
               </select>
               <button onClick={() => setEditing(true)} className="ml-auto px-2.5 py-1 rounded-md border border-white/10 text-white/50 text-[10px] hover:text-white/80 hover:bg-white/[0.05] transition-all">

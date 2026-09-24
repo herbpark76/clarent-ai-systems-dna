@@ -58,8 +58,12 @@ You receive raw newsletter text and must extract individual AI news items, turni
 INSTRUCTIONS:
 1. Skip sponsored sections, advertisements, partner content, footer boilerplate, unsubscribe links, and promotional blurbs.
 2. For each genuine news item, produce ONE entry with these fields:
-   - type: exactly one of "news", "tutorial", "use_case", "tool", "model_release", "risk"
-   - system_layer: exactly one of "model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface"
+   - type: exactly one of "news", "tutorial", "use_case", "tool", "model_release", "risk", "industry"
+   - system_layer: one of "model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface", or null
+     * "interface" = how people interact with AI (chat, voice, apps, UX, design)
+     * Agent products and autonomous AI agents (e.g. Meta's Muse, Devin, agent frameworks) = "agent"
+     * Business, funding, education, or market stories: use the layer they most affect. If there is no clear technical layer, set system_layer to null and use type "industry".
+     * General industry news with no specific system layer = type "industry" with system_layer null.
    - title: concise headline (your own wording)
    - summary: 2-4 sentences summarizing the item IN YOUR OWN WORDS. Never copy text from the source.
    - why_it_matters: 1-2 sentences on significance for AI practitioners
@@ -71,13 +75,22 @@ INSTRUCTIONS:
    - For model_release type only: model_name, vendor, benchmark_score, price_input, price_output (all nullable strings)
    - source_url: if discoverable in the text, otherwise null
 
-3. Sort each item into exactly ONE type and ONE system_layer — no item gets multiple.
+MODEL RELEASES — ONE ENTRY PER MODEL:
+If a story covers several models (e.g. "Opus 5.5 and GPT-6 Sol/Luna"), split it into SEPARATE entries, one per model. Each entry gets its own model_name, vendor, benchmark_score, price_input, and price_output. Put the shared context (e.g. "announced together at X event") in each entry's summary so each stands alone. Do NOT combine multiple models into one entry.
+
+COMMUNITY AI WORKFLOW & ROUNDTABLE STORIES:
+Always capture "Community AI Workflow" and "Roundtable" stories as use_case entries. Structure them as Problem → Tool → Steps → Result:
+   - summary: describe the problem and the result achieved
+   - how_its_built: describe the tool and approach used
+   - steps: array of { text } objects describing each step of the workflow
+
+3. Sort each item into exactly ONE type — no item gets multiple. system_layer is also singular or null (for industry type).
 4. Keep summaries short and rewritten — never paste source text.
 5. If the newsletter contains no genuine AI news items, return an empty array.
 
 DUPLICATE DETECTION:
 You will also receive a list of existing entries from the last 30 days, each with an id, title, type, system_layer, and model_name.
-For each item you extract, compare it against the existing entries. If an item covers the same story or the same model release as an existing entry (same type AND similar topic/title), set:
+For each item you extract, compare it against the existing entries. If an item covers the same story or the same model release as an existing entry (same type AND similar topic/title, or same model_name for model_release), set:
    - duplicate_of_id: the id of the existing entry
    - duplicate_of_title: the title of the existing entry
 If it is NOT a duplicate, set duplicate_of_id to null.
@@ -86,12 +99,13 @@ When in doubt, do NOT flag as duplicate — only flag when the overlap is clear.
 You MUST call the save_entries tool with your results. Do not output any text.`;
 
 const VALID_TYPES = new Set([
-  "news", "tutorial", "use_case", "tool", "model_release", "risk",
+  "news", "tutorial", "use_case", "tool", "model_release", "risk", "industry",
 ]);
 const VALID_LAYERS = new Set([
   "model", "agent", "tools_connectors", "data_context",
   "evals", "security_governance", "interface",
 ]);
+const NULLABLE_LAYER_TYPES = new Set(["industry"]);
 
 // ── URL cleaning ───────────────────────────────────────
 function stripTrackingParams(rawUrl: string): string {
@@ -186,7 +200,11 @@ function extractPublishDate(html: string): string | null {
 function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEntry | null {
   if (!raw.title || !raw.summary) return null;
   if (!VALID_TYPES.has(raw.type)) return null;
-  if (!VALID_LAYERS.has(raw.system_layer)) return null;
+
+  // system_layer can be null for industry entries; otherwise must be valid
+  const layer = raw.system_layer || null;
+  if (layer !== null && !VALID_LAYERS.has(layer)) return null;
+  if (layer === null && !NULLABLE_LAYER_TYPES.has(raw.type)) return null;
 
   // Validate duplicate_of_id — must be a real recent entry id
   let dupId: string | null = null;
@@ -196,7 +214,7 @@ function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEn
 
   return {
     type: raw.type,
-    system_layer: raw.system_layer,
+    system_layer: layer,
     title: String(raw.title).slice(0, 500),
     summary: String(raw.summary).slice(0, 2000),
     why_it_matters: raw.why_it_matters ? String(raw.why_it_matters) : null,
@@ -357,8 +375,8 @@ Deno.serve(async (req: Request) => {
             items: {
               type: "object" as const,
               properties: {
-                type: { type: "string", enum: ["news", "tutorial", "use_case", "tool", "model_release", "risk"] },
-                system_layer: { type: "string", enum: ["model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface"] },
+                type: { type: "string", enum: ["news", "tutorial", "use_case", "tool", "model_release", "risk", "industry"] },
+                system_layer: { type: "string", enum: ["model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface"], description: "The system layer this entry belongs to. Set to null for industry entries with no clear technical layer." },
                 title: { type: "string" },
                 summary: { type: "string" },
                 why_it_matters: { type: "string" },
@@ -386,7 +404,7 @@ Deno.serve(async (req: Request) => {
                 duplicate_of_id: { type: "string", description: "The id of an existing entry this duplicates, or null if not a duplicate." },
                 duplicate_of_title: { type: "string" },
               },
-              required: ["type", "system_layer", "title", "summary"],
+              required: ["type", "title", "summary"],
             },
           },
         },
