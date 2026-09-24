@@ -83,8 +83,7 @@ For each item you extract, compare it against the existing entries. If an item c
 If it is NOT a duplicate, set duplicate_of_id to null.
 When in doubt, do NOT flag as duplicate — only flag when the overlap is clear.
 
-Return ONLY a JSON object: { "entries": [ ... ] }
-Do not include markdown, commentary, or explanation outside the JSON.`;
+You MUST call the save_entries tool with your results. Do not output any text.`;
 
 const VALID_TYPES = new Set([
   "news", "tutorial", "use_case", "tool", "model_release", "risk",
@@ -346,7 +345,56 @@ Deno.serve(async (req: Request) => {
         ).join("\n")
       : "(no existing entries in the last 30 days)";
 
-    // ── Call Claude ──────────────────────────────────────
+    // ── Define tool schema for structured output ────────
+    const tools = [{
+      name: "save_entries",
+      description: "Save the extracted newsletter entries as structured data.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          entries: {
+            type: "array" as const,
+            items: {
+              type: "object" as const,
+              properties: {
+                type: { type: "string", enum: ["news", "tutorial", "use_case", "tool", "model_release", "risk"] },
+                system_layer: { type: "string", enum: ["model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface"] },
+                title: { type: "string" },
+                summary: { type: "string" },
+                why_it_matters: { type: "string" },
+                how_its_built: { type: "string" },
+                business_angle: { type: "string" },
+                steps: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      text: { type: "string" },
+                      prompt: { type: "string" },
+                    },
+                    required: ["text"],
+                  },
+                },
+                tags: { type: "array", items: { type: "string" } },
+                role_tags: { type: "array", items: { type: "string" } },
+                model_name: { type: "string" },
+                vendor: { type: "string" },
+                benchmark_score: { type: "string" },
+                price_input: { type: "string" },
+                price_output: { type: "string" },
+                source_url: { type: "string" },
+                duplicate_of_id: { type: "string", description: "The id of an existing entry this duplicates, or null if not a duplicate." },
+                duplicate_of_title: { type: "string" },
+              },
+              required: ["type", "system_layer", "title", "summary"],
+            },
+          },
+        },
+        required: ["entries"],
+      },
+    }];
+
+    // ── Call Claude with forced tool use ─────────────────
     const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -356,8 +404,10 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 8000,
+        max_tokens: 16000,
         system: SYSTEM_PROMPT,
+        tools,
+        tool_choice: { type: "tool", name: "save_entries" },
         messages: [
           {
             role: "user",
@@ -376,20 +426,32 @@ Deno.serve(async (req: Request) => {
     }
 
     const claudeData = await claudeResponse.json();
-    const rawText: string = claudeData?.content?.[0]?.text ?? "";
+    const stopReason: string = claudeData?.stop_reason ?? "unknown";
 
-    let parsed: { entries?: ProcessedEntry[] };
-    try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
-    } catch {
+    // Handle max_tokens — the newsletter was too long for Claude to finish
+    if (stopReason === "max_tokens") {
+      const rawPreview = JSON.stringify(claudeData?.content ?? "").slice(0, 500);
+      console.error(`[process-newsletter] stop_reason=max_tokens, raw preview: ${rawPreview}`);
       return new Response(
-        JSON.stringify({ error: "Failed to parse Claude response as JSON." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ error: "The newsletter was too long for Claude to process in one pass. Try pasting a shorter excerpt or fewer items." }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const rawEntries = Array.isArray(parsed.entries) ? parsed.entries : [];
+    // Extract entries from the tool_use block's input
+    const contentBlocks: Array<any> = claudeData?.content ?? [];
+    const toolUseBlock = contentBlocks.find((b: any) => b.type === "tool_use" && b.name === "save_entries");
+
+    if (!toolUseBlock || !toolUseBlock.input) {
+      const rawPreview = JSON.stringify(claudeData?.content ?? "").slice(0, 500);
+      console.error(`[process-newsletter] No tool_use block found. stop_reason=${stopReason}, raw preview: ${rawPreview}`);
+      return new Response(
+        JSON.stringify({ error: "Claude did not return structured entries. Please try again." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const rawEntries: ProcessedEntry[] = Array.isArray(toolUseBlock.input.entries) ? toolUseBlock.input.entries : [];
     const cleanEntries = rawEntries
       .map((e) => sanitizeEntry(e, recentIds))
       .filter((e): e is NonNullable<typeof e> => e !== null);
@@ -462,6 +524,7 @@ Deno.serve(async (req: Request) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
+    console.error(`[process-newsletter] Unhandled error: ${err?.message ?? err}`);
     return new Response(
       JSON.stringify({ error: err.message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
