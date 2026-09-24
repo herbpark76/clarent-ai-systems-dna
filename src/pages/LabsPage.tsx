@@ -4,6 +4,7 @@ import { FlaskConical, ChevronDown, Copy, Check, Loader2 } from 'lucide-react';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedByType, normalizeSteps, getSourceDate, TypeBadge, LayerBadge, SourcesList,
+  FromTheFieldBadge,
   type SignalEntry, PageErrorBoundary,
 } from '../lib/signalDesk';
 import { supabase } from '../lib/supabase';
@@ -48,6 +49,7 @@ function LabCard({
       {/* Header */}
       <button onClick={onToggle} className="w-full flex items-center gap-2 px-4 py-3 text-left">
         <span className="flex-shrink-0"><TypeBadge type={entry.type} /></span>
+        <FromTheFieldBadge origin={entry.origin} size="xs" />
         <LayerBadge layer={entry.system_layer} />
         <Link to={`/signal-desk/${entry.slug}`} onClick={(e) => e.stopPropagation()} className="text-sm font-bold text-white flex-1 truncate hover:text-cyan-300 transition-colors">{entry.title}</Link>
         {date && <span className="text-[10px] text-white/25 hidden sm:block">{date}</span>}

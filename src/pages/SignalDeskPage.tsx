@@ -4,6 +4,7 @@ import { Newspaper, ChevronRight, Layers, Loader2, ArrowLeft } from 'lucide-reac
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedEntries, getSourceDate, TypeBadge, LayerBadge, SourcesList,
+  FromTheFieldBadge,
   LAYER_LABELS, LAYER_COLORS, type SignalEntry, type SystemLayer, PageErrorBoundary,
 } from '../lib/signalDesk';
 
@@ -63,6 +64,7 @@ function EntryDetailCard({ entry }: { entry: SignalEntry }) {
     <Link to={`/signal-desk/${entry.slug}`} className="block rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 hover:bg-white/[0.05] hover:border-white/[0.15] transition-all">
       <div className="flex items-center gap-2 mb-2">
         <TypeBadge type={entry.type} />
+        <FromTheFieldBadge origin={entry.origin} />
         <LayerBadge layer={entry.system_layer} />
         {date && <span className="text-[10px] text-white/25 ml-auto">{date}</span>}
       </div>
@@ -89,6 +91,7 @@ function SignalDeskInner() {
   const [entries, setEntries] = useState<SignalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<SystemLayer | null | 'all'>('all');
+  const [fromFieldOnly, setFromFieldOnly] = useState(false);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -101,20 +104,22 @@ function SignalDeskInner() {
       .catch(() => { setError(true); setLoading(false); });
   }, []);
 
+  const visibleEntries = fromFieldOnly ? entries.filter((e) => e.origin === 'original') : entries;
+
   const layerGroups = LAYER_ORDER.map((layer) => ({
     layer,
     label: LAYER_LABELS[layer],
     color: LAYER_COLORS[layer],
-    entries: entries.filter((e) => e.system_layer === layer),
+    entries: visibleEntries.filter((e) => e.system_layer === layer),
   }));
 
-  const industryEntries = entries.filter((e) => !e.system_layer);
+  const industryEntries = visibleEntries.filter((e) => !e.system_layer);
 
-  const filtered = filter === 'all'
-    ? entries
-    : filter === null
-      ? industryEntries
-      : entries.filter((e) => e.system_layer === filter);
+  const filtered = (fromFieldOnly ? entries.filter((e) => e.origin === 'original') : entries).filter((e) => {
+    if (filter === 'all') return true;
+    if (filter === null) return !e.system_layer;
+    return e.system_layer === filter;
+  });
 
   if (loading) {
     return (
@@ -153,9 +158,27 @@ function SignalDeskInner() {
         </div>
 
         {/* Intro */}
-        <p className="text-sm text-white/45 leading-relaxed max-w-2xl mb-8">
+        <p className="text-sm text-white/45 leading-relaxed max-w-2xl mb-4">
           Every AI headline is a clue about how these systems are built. Here's the latest news, sorted by the part of the system it touches.
         </p>
+
+        {/* From the field filter */}
+        <div className="flex items-center gap-2 mb-6">
+          <button
+            onClick={() => setFromFieldOnly(!fromFieldOnly)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              fromFieldOnly
+                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                : 'border-white/10 bg-white/[0.03] text-white/45 hover:text-white/70'
+            }`}
+          >
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${fromFieldOnly ? 'bg-emerald-400' : 'bg-white/30'}`} />
+            From the field
+          </button>
+          {fromFieldOnly && (
+            <span className="text-[10px] text-white/30">Showing original entries from Clarent practitioners</span>
+          )}
+        </div>
 
         {filter !== 'all' ? (
           <>

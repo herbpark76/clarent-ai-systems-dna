@@ -14,6 +14,8 @@ export interface SourceObj {
   url: string | null;
 }
 
+export type EntryOrigin = 'newsletter' | 'original';
+
 export interface SignalEntry {
   id: string;
   created_at: string;
@@ -40,6 +42,7 @@ export interface SignalEntry {
   sources: SourceObj[] | null;
   duplicate_of: string | null;
   duplicate_status: DuplicateStatus;
+  origin: EntryOrigin;
   status: 'draft' | 'published';
 }
 
@@ -266,5 +269,16 @@ export function SourcesList({ entry }: { entry: SignalEntry }) {
         </span>
       ))}
     </div>
+  );
+}
+
+export function FromTheFieldBadge({ origin, size = 'sm' }: { origin: EntryOrigin; size?: 'sm' | 'xs' }) {
+  if (origin !== 'original') return null;
+  const sizeClasses = size === 'xs' ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]';
+  return (
+    <span className={`${sizeClasses} rounded-full font-semibold border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 flex items-center gap-1 whitespace-nowrap`}>
+      <span className="inline-block w-1 h-1 rounded-full bg-emerald-400" />
+      From the field
+    </span>
   );
 }

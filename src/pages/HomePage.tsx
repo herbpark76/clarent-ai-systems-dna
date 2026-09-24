@@ -19,7 +19,7 @@ import { CONCEPTS, EDGES } from '../data/concepts';
 import { ROADMAPS, type ProgressStatus, type NextStep } from '../data/roadmaps';
 import { LEARNING_PATH_DEFS } from '../data/learningPaths';
 import { getAllArticleMetas, type ArticleMeta } from '../lib/articles';
-import { fetchLatestPublished, getSourceDate, TYPE_LABELS, TYPE_COLORS, type SignalEntry as SignalEntryType } from '../lib/signalDesk';
+import { fetchLatestPublished, getSourceDate, TYPE_LABELS, TYPE_COLORS, FromTheFieldBadge, type SignalEntry as SignalEntryType } from '../lib/signalDesk';
 
 type AppMode = 'explore' | 'roadmap';
 
@@ -152,6 +152,7 @@ function LatestSignalDeskStrip() {
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TYPE_COLORS[entry.type]}`}>
                     {TYPE_LABELS[entry.type]}
                   </span>
+                  <FromTheFieldBadge origin={entry.origin} size="xs" />
                   {date && <span className="text-[10px] text-white/25 ml-auto">{date}</span>}
                 </div>
                 <h3 className="text-sm font-bold text-white mb-1.5 leading-snug line-clamp-2 group-hover:text-white transition-colors">{entry.title}</h3>

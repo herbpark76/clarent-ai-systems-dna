@@ -5,7 +5,7 @@ import {
   ArrowLeft, Loader2, Trash2, Send, RefreshCw,
   Newspaper, AlertCircle, CheckCircle2, ExternalLink,
   Layers, Tag, Briefcase, Building2, ChevronDown, Link2,
-  GitMerge, XCircle, Copy, Cpu, Trophy,
+  GitMerge, XCircle, Copy, Cpu, Trophy, Plus, FileText, PenLine,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -14,6 +14,7 @@ import NavBar from '../components/NavBar';
 type EntryType = 'news' | 'tutorial' | 'use_case' | 'tool' | 'model_release' | 'risk' | 'industry';
 type SystemLayer = 'model' | 'agent' | 'tools_connectors' | 'data_context' | 'evals' | 'security_governance' | 'interface';
 type DuplicateStatus = 'none' | 'possible' | 'merged' | 'separate' | 'discarded';
+type EntryOrigin = 'newsletter' | 'original';
 
 interface SourceObj {
   name: string | null;
@@ -24,6 +25,7 @@ interface SourceObj {
 interface SignalEntry {
   id: string;
   created_at: string;
+  slug: string;
   type: EntryType;
   system_layer: SystemLayer | null;
   title: string;
@@ -46,6 +48,7 @@ interface SignalEntry {
   sources: SourceObj[] | null;
   duplicate_of: string | null;
   duplicate_status: DuplicateStatus;
+  origin: EntryOrigin;
   status: 'draft' | 'published';
 }
 
@@ -253,6 +256,12 @@ function EntryCard({
         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TYPE_COLORS[entry.type]}`}>
           {TYPE_LABELS[entry.type]}
         </span>
+        {entry.origin === 'original' && (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 flex items-center gap-1">
+            <span className="inline-block w-1 h-1 rounded-full bg-emerald-400" />
+            From the field
+          </span>
+        )}
         {entry.system_layer && (
           <span className={`text-[10px] font-medium flex items-center gap-1 ${LAYER_COLORS[entry.system_layer]}`}>
             <Layers className="w-2.5 h-2.5" />
@@ -599,13 +608,15 @@ export default function AdminSignalDesk() {
   const [entries, setEntries] = useState<SignalEntry[]>([]);
   const [modelEntries, setModelEntries] = useState<SignalEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
-  const [activeTab, setActiveTab] = useState<'review' | 'models'>('review');
+  const [activeTab, setActiveTab] = useState<'review' | 'models' | 'new'>('review');
   const [processUrl, setProcessUrl] = useState('');
   const [processText, setProcessText] = useState('');
   const [sourceName, setSourceName] = useState('');
   const [sourceDate, setSourceDate] = useState('');
   const [processing, setProcessing] = useState(false);
   const [processMsg, setProcessMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [notesText, setNotesText] = useState('');
+  const [notesProcessing, setNotesProcessing] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -714,6 +725,94 @@ export default function AdminSignalDesk() {
       setProcessMsg({ type: 'error', text: 'Network error. Please try again.' });
     }
     setProcessing(false);
+  };
+
+  const handleProcessNotes = async () => {
+    if (notesText.trim().length < 20) {
+      setProcessMsg({ type: 'error', text: 'Notes must be at least 20 characters.' });
+      return;
+    }
+    setNotesProcessing(true);
+    setProcessMsg(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setProcessMsg({ type: 'error', text: 'Not authenticated.' });
+        setNotesProcessing(false);
+        return;
+      }
+      const funcUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-newsletter`;
+      const resp = await fetch(funcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ mode: 'notes', text: notesText.trim() }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        setProcessMsg({ type: 'error', text: result.error || `Request failed (${resp.status})` });
+      } else {
+        setProcessMsg({ type: 'success', text: 'Draft created from your notes. Review and edit below.' });
+        setNotesText('');
+        loadEntries();
+        setActiveTab('review');
+      }
+    } catch {
+      setProcessMsg({ type: 'error', text: 'Network error. Please try again.' });
+    }
+    setNotesProcessing(false);
+  };
+
+  const handleCreateBlankEntry = async () => {
+    setProcessMsg(null);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+      if (!userId) {
+        setProcessMsg({ type: 'error', text: 'Not authenticated.' });
+        return;
+      }
+      // Generate a temporary slug from timestamp
+      const tempSlug = `entry-${Date.now()}`;
+      const { error } = await supabase
+        .from('signal_desk_entries')
+        .insert({
+          type: 'news',
+          system_layer: null,
+          title: 'Untitled entry',
+          summary: '',
+          why_it_matters: null,
+          how_its_built: null,
+          business_angle: null,
+          steps: [],
+          tags: [],
+          role_tags: [],
+          origin: 'original',
+          source_name: 'Clarent Technologies',
+          source_date: today,
+          source_url: null,
+          sources: [{ name: 'Clarent Technologies', date: today, url: null }],
+          duplicate_of: null,
+          duplicate_status: 'none',
+          slug: tempSlug,
+          status: 'draft',
+        })
+        .select('id');
+      if (error) {
+        setProcessMsg({ type: 'error', text: `Create failed: ${error.message}` });
+        return;
+      }
+      setProcessMsg({ type: 'success', text: 'Blank entry created. Edit it below.' });
+      loadEntries();
+      setActiveTab('review');
+    } catch {
+      setProcessMsg({ type: 'error', text: 'Failed to create blank entry.' });
+    }
   };
 
   const handleUpdate = async (id: string, patch: Partial<SignalEntry>) => {
@@ -912,6 +1011,12 @@ export default function AdminSignalDesk() {
             }`}>
             Model Tracker
           </button>
+          <button onClick={() => setActiveTab('new')}
+            className={`px-3 py-2 text-xs font-semibold transition-all border-b-2 -mb-px ${
+              activeTab === 'new' ? 'text-white border-emerald-500' : 'text-white/40 border-transparent hover:text-white/70'
+            }`}>
+            New Entry
+          </button>
         </div>
 
         {/* Review Queue tab */}
@@ -981,6 +1086,66 @@ export default function AdminSignalDesk() {
               </div>
             )}
           </>
+        )}
+
+        {/* New Entry tab */}
+        {activeTab === 'new' && (
+          <div className="space-y-6">
+            {/* Option 1: Draft from notes */}
+            <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.03] p-5">
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                <PenLine className="w-4 h-4 text-emerald-400" />
+                Draft from my notes
+              </h3>
+              <p className="text-xs text-white/40 leading-relaxed mb-4">
+                Paste rough notes — a client lesson, an observation, a how-to. Claude will structure them into a draft entry, keeping your wording and writing the business angle from a finance/tax/ERP perspective.
+              </p>
+              <textarea
+                value={notesText}
+                onChange={(e) => setNotesText(e.target.value)}
+                placeholder="Paste your notes here. Example: A client tried to automate AP invoice matching with an AI agent. The agent kept hallucinating vendor names because the ERP's vendor master had 40k records and the retrieval was too broad. We fixed it by scoping retrieval to the vendor's recent invoices first, then falling back to the full master. Lesson: context window isn't the issue — retrieval scope is."
+                rows={8}
+                className="w-full px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm placeholder-white/20 focus:outline-none focus:border-emerald-500/50 transition-all resize-y" />
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  onClick={handleProcessNotes}
+                  disabled={notesProcessing || notesText.trim().length < 20}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-green-500 text-white text-sm font-semibold hover:from-emerald-400 hover:to-green-400 disabled:opacity-60 transition-all">
+                  {notesProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PenLine className="w-3.5 h-3.5" />}
+                  {notesProcessing ? 'Drafting…' : 'Draft from notes'}
+                </button>
+                <span className="text-[10px] text-white/25">Creates one draft with origin "original" and source "Clarent Technologies". No duplicate detection.</span>
+              </div>
+            </div>
+
+            {/* Option 2: Blank entry */}
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
+              <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-white/50" />
+                Blank entry
+              </h3>
+              <p className="text-xs text-white/40 leading-relaxed mb-4">
+                Start from scratch with an empty draft. You'll fill in all fields yourself in the editor.
+              </p>
+              <button
+                onClick={handleCreateBlankEntry}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.05] text-white text-sm font-semibold hover:bg-white/[0.08] transition-all">
+                <Plus className="w-3.5 h-3.5" />
+                Create blank entry
+              </button>
+            </div>
+
+            {processMsg && (
+              <div className={`flex items-center gap-1.5 text-xs ${
+                processMsg.type === 'success' ? 'text-green-400'
+                : processMsg.type === 'error' ? 'text-red-400' : 'text-white/50'
+              }`}>
+                {processMsg.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" />
+                 : processMsg.type === 'error' ? <AlertCircle className="w-3.5 h-3.5" /> : null}
+                {processMsg.text}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Model Tracker tab */}

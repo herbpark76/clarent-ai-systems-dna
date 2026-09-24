@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedByType, normalizeSteps, normalizeStringArray, getSourceDate,
-  TypeBadge, LayerBadge, SourcesList, LAYER_LABELS,
+  TypeBadge, LayerBadge, SourcesList, FromTheFieldBadge, LAYER_LABELS,
   type SignalEntry, type SystemLayer, PageErrorBoundary,
 } from '../lib/signalDesk';
 
@@ -20,6 +20,7 @@ function UseCaseCard({ entry }: { entry: SignalEntry }) {
     <Link to={`/signal-desk/${entry.slug}`} className="group block rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 hover:border-white/[0.15] transition-all">
       <div className="flex items-center gap-2 mb-2">
         <TypeBadge type={entry.type} />
+        <FromTheFieldBadge origin={entry.origin} />
         <LayerBadge layer={entry.system_layer} />
         {date && <span className="text-[10px] text-white/25 ml-auto">{date}</span>}
       </div>

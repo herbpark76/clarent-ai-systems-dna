@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedByType, getSourceDate, TypeBadge, LayerBadge, SourcesList,
+  FromTheFieldBadge,
   type SignalEntry, PageErrorBoundary,
 } from '../lib/signalDesk';
 
@@ -27,6 +28,7 @@ function RiskCard({ entry }: { entry: SignalEntry }) {
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 hover:border-white/[0.15] transition-all">
         <div className="flex items-center gap-2 mb-2">
           <TypeBadge type={entry.type} />
+          <FromTheFieldBadge origin={entry.origin} />
           <LayerBadge layer={entry.system_layer} />
           {date && <span className="text-[10px] text-white/25 ml-auto">{date}</span>}
         </div>

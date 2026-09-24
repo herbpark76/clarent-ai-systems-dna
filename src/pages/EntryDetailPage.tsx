@@ -4,7 +4,7 @@ import { ArrowLeft, Copy, Check, Link2, Loader2, Tag } from 'lucide-react';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedBySlug, fetchPublishedEntries, normalizeSteps, normalizeStringArray,
-  getSources, getSourceDate, TypeBadge, LayerBadge,
+  getSources, getSourceDate, TypeBadge, LayerBadge, FromTheFieldBadge,
   type SignalEntry, PageErrorBoundary,
 } from '../lib/signalDesk';
 import { supabase } from '../lib/supabase';
@@ -195,6 +195,7 @@ function EntryDetailInner() {
         {/* Header */}
         <div className="flex items-center gap-2 mb-4 flex-wrap">
           <TypeBadge type={entry.type} />
+          <FromTheFieldBadge origin={entry.origin} />
           <LayerBadge layer={entry.system_layer} />
           {date && <span className="text-[10px] text-white/25">{date}</span>}
         </div>

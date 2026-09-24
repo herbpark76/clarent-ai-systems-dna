@@ -52,6 +52,32 @@ interface ProcessedEntry {
   duplicate_of_title?: string | null;
 }
 
+const NOTES_SYSTEM_PROMPT = `You are an AI systems analyst for "Signal Desk" by Clarent, a learning platform that teaches how modern AI systems are built.
+
+You receive ROUGH NOTES from a practitioner — a client lesson, an observation, or a how-to. Turn them into ONE structured learning entry.
+
+CRITICAL RULES:
+- Keep the author's wording and point of view. Do NOT invent facts, numbers, or details that are not in the notes.
+- Produce exactly ONE entry. Never split into multiple.
+- Write the business_angle from a finance, tax, or ERP implementation perspective. Be concrete: name the specific control, question, or decision.
+- The source is "Clarent Technologies" with today's date and no URL.
+
+FIELDS:
+- type: exactly one of "news", "tutorial", "use_case", "tool", "model_release", "risk", "industry"
+- system_layer: one of "model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface", or null
+  * General observations with no specific technical layer = type "industry" with system_layer null.
+- title: concise headline in the author's voice
+- summary: 2-4 sentences summarizing the observation or lesson, keeping the author's perspective
+- why_it_matters: 1-2 sentences on why this matters for practitioners
+- how_its_built: 1-3 sentences on what this reveals about how AI systems are built or where they break (if applicable)
+- business_angle: Write for a finance, tax, or ERP leader. Be concrete and actionable. 1-2 sentences.
+- tags: array of 2-5 short lowercase tags
+- role_tags: array of relevant roles from: finance, legal, ops, marketing, IT (can be empty)
+- For tutorials ONLY: steps: array of { text, prompt? } objects
+- For model_release type only: model_name, vendor, benchmark_score (number or null), benchmark_name, price_input, price_output
+
+You MUST call the save_entry tool with your result. Do not output any text.`;
+
 const SYSTEM_PROMPT = `You are an AI systems analyst for "Signal Desk" by Clarent, a learning platform that teaches how modern AI systems are built.
 
 You receive raw newsletter text and must extract individual AI news items, turning each into a structured learning entry.
@@ -117,6 +143,8 @@ const NULLABLE_LAYER_TYPES = new Set(["industry"]);
 // ── Slug generation ───────────────────────────────────
 function generateBaseSlug(title: string): string {
   let slug = title.toLowerCase()
+    // Strip apostrophes so "Meta's" → "metas" not "meta-s"
+    .replace(/'/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   if (!slug) slug = "entry";
@@ -329,7 +357,8 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { text, url, source_name, source_date } = await req.json();
+    const { text, url, source_name, source_date, mode } = await req.json();
+    const isNotesMode = mode === "notes";
 
     // ── Admin auth check (before any fetch) ─────────────
     const authHeader = req.headers.get("Authorization") ?? "";
@@ -418,6 +447,179 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ error: "Anthropic API key not configured." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!ANTHROPIC_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "Anthropic API key not configured." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ── Notes mode: draft a single entry from rough notes ──
+    if (isNotesMode) {
+      if (!text || typeof text !== "string" || text.trim().length < 20) {
+        return new Response(
+          JSON.stringify({ error: "Notes must be at least 20 characters." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+      const notesTools = [{
+        name: "save_entry",
+        description: "Save the single structured entry derived from the practitioner's notes.",
+        input_schema: {
+          type: "object" as const,
+          properties: {
+            type: { type: "string", enum: ["news", "tutorial", "use_case", "tool", "model_release", "risk", "industry"] },
+            system_layer: { type: "string", enum: ["model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface"] },
+            title: { type: "string" },
+            summary: { type: "string" },
+            why_it_matters: { type: "string" },
+            how_its_built: { type: "string" },
+            business_angle: { type: "string" },
+            steps: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { text: { type: "string" }, prompt: { type: "string" } },
+                required: ["text"],
+              },
+            },
+            tags: { type: "array", items: { type: "string" } },
+            role_tags: { type: "array", items: { type: "string" } },
+            model_name: { type: "string" },
+            vendor: { type: "string" },
+            benchmark_score: { type: "number" },
+            benchmark_name: { type: "string" },
+            price_input: { type: "string" },
+            price_output: { type: "string" },
+          },
+          required: ["type", "title", "summary"],
+        },
+      }];
+
+      const today = new Date().toISOString().slice(0, 10);
+
+      const notesClaudeResp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: CLAUDE_MODEL,
+          max_tokens: 4000,
+          system: NOTES_SYSTEM_PROMPT,
+          tools: notesTools,
+          tool_choice: { type: "tool", name: "save_entry" },
+          messages: [
+            { role: "user", content: `Today's date: ${today}\n\nPractitioner's notes:\n\n${text.trim()}` },
+          ],
+        }),
+      });
+
+      if (!notesClaudeResp.ok) {
+        const errBody = await notesClaudeResp.text();
+        return new Response(
+          JSON.stringify({ error: `Claude API error (${notesClaudeResp.status}): ${errBody.slice(0, 300)}` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const notesClaudeData = await notesClaudeResp.json();
+      const notesBlocks: Array<any> = notesClaudeData?.content ?? [];
+      const notesToolUse = notesBlocks.find((b: any) => b.type === "tool_use" && b.name === "save_entry");
+
+      if (!notesToolUse || !notesToolUse.input) {
+        return new Response(
+          JSON.stringify({ error: "Claude did not return a structured entry. Please try again." }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const rawEntry: ProcessedEntry = notesToolUse.input;
+      const cleanEntry = sanitizeEntry(rawEntry, new Set());
+      if (!cleanEntry) {
+        return new Response(
+          JSON.stringify({ error: "Could not generate a valid entry from these notes. Please add more detail." }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // Generate unique slug
+      const baseSlug = generateBaseSlug(cleanEntry.title);
+      const { data: existingSlugs } = await supabase
+        .from("signal_desk_entries")
+        .select("slug")
+        .eq("slug", baseSlug);
+      let finalSlug = baseSlug;
+      let suffix = 2;
+      while ((existingSlugs || []).some((r: any) => r.slug === finalSlug)) {
+        finalSlug = `${baseSlug}-${suffix}`;
+        suffix++;
+      }
+
+      const notesSource: SourceObj = {
+        name: "Clarent Technologies",
+        date: today,
+        url: null,
+      };
+
+      const { data: insertedRows, error: insertError } = await supabase
+        .from("signal_desk_entries")
+        .insert({
+          type: cleanEntry.type,
+          system_layer: cleanEntry.system_layer,
+          title: cleanEntry.title,
+          summary: cleanEntry.summary,
+          why_it_matters: cleanEntry.why_it_matters,
+          how_its_built: cleanEntry.how_its_built,
+          business_angle: cleanEntry.business_angle,
+          steps: cleanEntry.steps || [],
+          tags: cleanEntry.tags || [],
+          role_tags: cleanEntry.role_tags || [],
+          model_name: cleanEntry.model_name,
+          vendor: cleanEntry.vendor,
+          benchmark_score: cleanEntry.benchmark_score,
+          benchmark_name: cleanEntry.benchmark_name,
+          price_input: cleanEntry.price_input,
+          price_output: cleanEntry.price_output,
+          source_name: "Clarent Technologies",
+          source_date: today,
+          source_url: null,
+          sources: [notesSource],
+          duplicate_of: null,
+          duplicate_status: "none",
+          origin: "original",
+          slug: finalSlug,
+          origin: "newsletter",
+          status: "draft",
+        })
+        .select("id, title, type, system_layer, status");
+
+      if (insertError) {
+        return new Response(
+          JSON.stringify({ error: `Database insert failed: ${insertError.message}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          entries: insertedRows,
+          count: (insertedRows || []).length,
+          new_count: (insertedRows || []).length,
+          duplicate_count: 0,
+          mode: "notes",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
