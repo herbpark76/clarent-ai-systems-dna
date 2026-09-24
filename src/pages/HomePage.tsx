@@ -4,7 +4,7 @@ import {
   ChevronRight, ArrowRight,
   BookOpen, GraduationCap, Wrench, Layers, Building2,
   Zap, BarChart2, Brain, Search, Bot,
-  Map, Compass,
+  Map, Compass, Newspaper,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { loadContent, type ContentData } from '../lib/contentService';
@@ -19,6 +19,7 @@ import { CONCEPTS, EDGES } from '../data/concepts';
 import { ROADMAPS, type ProgressStatus, type NextStep } from '../data/roadmaps';
 import { LEARNING_PATH_DEFS } from '../data/learningPaths';
 import { getAllArticleMetas, type ArticleMeta } from '../lib/articles';
+import { fetchLatestPublished, getSourceDate, TYPE_LABELS, TYPE_COLORS, type SignalEntry as SignalEntryType } from '../lib/signalDesk';
 
 type AppMode = 'explore' | 'roadmap';
 
@@ -113,6 +114,60 @@ function loadProgress(): Record<string, ProgressStatus> {
 
 function saveProgress(p: Record<string, ProgressStatus>) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch { /* no-op */ }
+}
+
+function LatestSignalDeskStrip() {
+  const [entries, setEntries] = useState<SignalEntryType[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetchLatestPublished(6)
+      .then((data) => { setEntries(data); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  if (!loaded || entries.length === 0) return null;
+
+  return (
+    <section className="py-16 border-t border-white/[0.05]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="inline-flex items-center gap-2 mb-2 px-3 py-1 rounded-full border border-white/10 bg-white/[0.03] text-xs text-white/45">
+              <Newspaper className="w-3 h-3" />
+              Signal Desk
+            </div>
+            <h2 className="text-2xl font-bold text-white">Latest AI signals</h2>
+          </div>
+          <Link to="/signal-desk" className="hidden sm:flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors">
+            View all <ChevronRight className="w-3 h-3" />
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {entries.map((entry) => {
+            const date = getSourceDate(entry);
+            return (
+              <Link key={entry.id} to="/signal-desk" className="group p-4 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.15] transition-all duration-200 flex flex-col">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TYPE_COLORS[entry.type]}`}>
+                    {TYPE_LABELS[entry.type]}
+                  </span>
+                  {date && <span className="text-[10px] text-white/25 ml-auto">{date}</span>}
+                </div>
+                <h3 className="text-sm font-bold text-white mb-1.5 leading-snug line-clamp-2 group-hover:text-white transition-colors">{entry.title}</h3>
+                <p className="text-xs text-white/40 leading-relaxed line-clamp-2 flex-1">{entry.summary}</p>
+              </Link>
+            );
+          })}
+        </div>
+        <div className="mt-4 text-center sm:hidden">
+          <Link to="/signal-desk" className="inline-flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors">
+            View all <ChevronRight className="w-3 h-3" />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function HomePage() {
@@ -598,6 +653,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* LATEST FROM SIGNAL DESK */}
+      <LatestSignalDeskStrip />
 
       {/* WAITLIST */}
       <section id="waitlist" className="py-20 border-t border-white/[0.05]">
