@@ -6,6 +6,7 @@ export interface ArticleMeta {
   description: string;
   concepts: string[];
   updated: string;
+  track: string;
 }
 
 export interface ParsedArticle {
@@ -41,6 +42,7 @@ function emptyMeta(): ArticleMeta {
     description: '',
     concepts: [],
     updated: '',
+    track: '',
   };
 }
 
@@ -74,6 +76,9 @@ function parseYaml(fmLines: string[]): ArticleMeta {
         break;
       case 'concepts':
         meta.concepts = parseListValue(value);
+        break;
+      case 'track':
+        meta.track = value;
         break;
       default:
         break;

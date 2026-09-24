@@ -1,8 +1,12 @@
-import { ChevronLeft, ChevronRight, X, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, X, Clock, BookOpen, CheckCircle2 } from 'lucide-react';
 import type { LearningPathDef } from '../data/learningPaths';
 import type { ProgressStatus } from '../data/roadmaps';
 import type { Concept } from '../data/concepts';
 import { CLUSTER_META } from '../data/concepts';
+import { getAllArticleMetas, type ArticleMeta } from '../lib/articles';
+import { loadReadArticles } from '../lib/progress';
 
 interface Props {
   path: LearningPathDef;
@@ -13,6 +17,13 @@ interface Props {
   onNavigate: (index: number) => void;
   onExit: () => void;
 }
+
+const DOMAIN_TRACK_ORDER = [
+  'building-a-domain-intelligence-platform',
+  'modeling-a-domain-knowledge-graph',
+  'rag-for-vertical-data',
+  'mcp-for-domain-tools',
+];
 
 const STATUS_ICON: Record<ProgressStatus, { symbol: string; color: string }> = {
   'not-started': { symbol: '○', color: 'text-white/25' },
@@ -27,6 +38,20 @@ function cycleStatus(current: ProgressStatus): ProgressStatus {
 }
 
 export default function LearningPathSidebar({ path, conceptsMap, currentIndex, progress, onSetProgress, onNavigate, onExit }: Props) {
+  const [domainArticles, setDomainArticles] = useState<ArticleMeta[]>([]);
+  const [readArticles, setReadArticles] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (path.id === 'domain-builder') {
+      getAllArticleMetas().then((metas) => {
+        const ordered = DOMAIN_TRACK_ORDER
+          .map((slug) => metas.find((m) => m.slug === slug))
+          .filter((m): m is ArticleMeta => !!m);
+        setDomainArticles(ordered);
+      });
+      setReadArticles(loadReadArticles());
+    }
+  }, [path.id]);
   const total = path.conceptIds.length;
   const currentId = path.conceptIds[currentIndex];
   const currentConcept = conceptsMap[currentId];
@@ -299,6 +324,40 @@ export default function LearningPathSidebar({ path, conceptsMap, currentIndex, p
             );
           })}
         </div>
+
+        {/* Domain track articles (only when domain-builder path is active) */}
+        {domainArticles.length > 0 && (
+          <div className="mt-5 pt-4 border-t border-white/[0.05]">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/25 mb-3 flex items-center gap-1.5">
+              <BookOpen className="w-3 h-3" />
+              Deep Dive Articles
+            </div>
+            <div className="space-y-1.5">
+              {domainArticles.map((meta, idx) => {
+                const isRead = !!readArticles[meta.slug];
+                return (
+                  <Link
+                    key={meta.slug}
+                    to={`/articles/${meta.slug}`}
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-rose-500/20 bg-rose-500/[0.05] hover:bg-rose-500/[0.1] hover:border-rose-500/35 transition-all duration-200 group"
+                  >
+                    <div className="flex-shrink-0 w-5 h-5 rounded-full border border-rose-500/30 bg-rose-500/10 flex items-center justify-center text-[9px] font-bold text-rose-300">
+                      {idx + 1}
+                    </div>
+                    <span className="text-xs font-medium text-white/60 group-hover:text-white/90 transition-colors flex-1 truncate">
+                      {meta.title}
+                    </span>
+                    {isRead ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-3 h-3 text-white/20 group-hover:text-white/50 flex-shrink-0 transition-colors" />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer hint */}

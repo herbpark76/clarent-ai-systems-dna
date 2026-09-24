@@ -18,9 +18,30 @@ import NavBar from '../components/NavBar';
 import { CONCEPTS, EDGES } from '../data/concepts';
 import { ROADMAPS, type ProgressStatus, type NextStep } from '../data/roadmaps';
 import { LEARNING_PATH_DEFS } from '../data/learningPaths';
-import { getAvailableArticleSlugs, slugifyTitle } from '../lib/articles';
+import { getAllArticleMetas, type ArticleMeta } from '../lib/articles';
 
 type AppMode = 'explore' | 'roadmap';
+
+const CATEGORY_COLORS: Record<string, { color: string; tag: string }> = {
+  Retrieval:   { color: 'border-emerald-500/30', tag: 'bg-emerald-500/15 text-emerald-300' },
+  Protocols:   { color: 'border-orange-500/30', tag: 'bg-orange-500/15 text-orange-300' },
+  Agents:      { color: 'border-yellow-500/30', tag: 'bg-yellow-500/15 text-yellow-300' },
+  Data:        { color: 'border-teal-500/30', tag: 'bg-teal-500/15 text-teal-300' },
+  Integration: { color: 'border-red-500/30', tag: 'bg-red-500/15 text-red-300' },
+  Evaluation:  { color: 'border-sky-500/30', tag: 'bg-sky-500/15 text-sky-300' },
+  Domain:      { color: 'border-rose-500/30', tag: 'bg-rose-500/15 text-rose-300' },
+};
+
+function getCategoryStyle(category: string) {
+  return CATEGORY_COLORS[category] ?? { color: 'border-white/15', tag: 'bg-white/10 text-white/50' };
+}
+
+const DOMAIN_TRACK_ORDER = [
+  'building-a-domain-intelligence-platform',
+  'modeling-a-domain-knowledge-graph',
+  'rag-for-vertical-data',
+  'mcp-for-domain-tools',
+];
 
 const LEARNING_PATHS = [
   {
@@ -73,15 +94,6 @@ const LEARNING_PATHS = [
   },
 ];
 
-const DEEP_DIVES = [
-  { title: 'What is RAG?', category: 'Retrieval', color: 'border-emerald-500/30', tag: 'bg-emerald-500/15 text-emerald-300', description: 'A complete guide to Retrieval-Augmented Generation — how it works, why it matters, and when to use it over fine-tuning.', readTime: '5 min read' },
-  { title: 'What is MCP?', category: 'Protocols', color: 'border-orange-500/30', tag: 'bg-orange-500/15 text-orange-300', description: 'Model Context Protocol explained — the emerging standard that lets AI agents connect to any tool or data source.', readTime: '4 min read' },
-  { title: 'What are AI Agents?', category: 'Agents', color: 'border-yellow-500/30', tag: 'bg-yellow-500/15 text-yellow-300', description: 'How agents plan, reason, and act — breaking down the loop from goal to tool call to response.', readTime: '5 min read' },
-  { title: 'Vector DBs vs Knowledge Graphs', category: 'Data', color: 'border-teal-500/30', tag: 'bg-teal-500/15 text-teal-300', description: 'Two powerful ways to organize knowledge for AI. Understand the tradeoffs and when each architecture wins.', readTime: '5 min read' },
-  { title: 'How Tool Calling Works', category: 'Integration', color: 'border-red-500/30', tag: 'bg-red-500/15 text-red-300', description: 'A deep look at how LLMs invoke external functions — the mechanism behind every AI-powered integration.', readTime: '5 min read' },
-  { title: 'How to Evaluate AI Systems', category: 'Evaluation', color: 'border-sky-500/30', tag: 'bg-sky-500/15 text-sky-300', description: 'Practical frameworks for measuring accuracy, relevance, faithfulness, and safety in production AI systems.', readTime: '6 min read' },
-];
-
 const INTEREST_OPTIONS = [
   'Just exploring', 'LLMs & Prompt Engineering', 'Building RAG systems',
   'AI Agents & Orchestration', 'Production AI Architecture',
@@ -114,7 +126,7 @@ export default function HomePage() {
   const [formError, setFormError] = useState('');
   const [showCompletion, setShowCompletion] = useState(false);
 
-  const articleSlugs = getAvailableArticleSlugs();
+  const [articleMetas, setArticleMetas] = useState<ArticleMeta[]>([]);
 
   const [content, setContent] = useState<ContentData>({
     concepts: CONCEPTS,
@@ -129,6 +141,7 @@ export default function HomePage() {
 
   useEffect(() => {
     loadContent().then(setContent);
+    getAllArticleMetas().then(setArticleMetas);
   }, []);
 
   const selectedRoadmap = selectedRoadmapId ? ROADMAPS.find((r) => r.id === selectedRoadmapId) ?? null : null;
@@ -439,14 +452,28 @@ export default function HomePage() {
                       <span key={t} className="px-2 py-0.5 rounded-md bg-white/[0.07] border border-white/[0.07] text-xs text-white/55">{t}</span>
                     ))}
                   </div>
-                  {pathDef && (
-                    <div className="mt-4 pt-3 border-t border-white/[0.07] flex items-center justify-between">
-                      <span className="text-xs text-white/30">{pathDef.conceptIds.length} concepts</span>
-                      <span className={`text-xs font-medium ${accent}`}>
-                        {isActive ? 'In progress →' : 'Start path →'}
-                      </span>
-                    </div>
-                  )}
+                  {pathDef && (() => {
+                    const completed = pathDef.conceptIds.filter((cid) => progress[cid] === 'completed').length;
+                    const pct = Math.round((completed / pathDef.conceptIds.length) * 100);
+                    return (
+                      <div className="mt-4 pt-3 border-t border-white/[0.07]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs text-white/30">{pathDef.conceptIds.length} concepts</span>
+                          <span className={`text-xs font-medium ${accent}`}>
+                            {isActive ? 'In progress →' : pct > 0 ? `${pct}% complete →` : 'Start path →'}
+                          </span>
+                        </div>
+                        {pct > 0 && (
+                          <div className="h-1 rounded-full bg-white/[0.08] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all duration-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </button>
               );
             })}
@@ -505,42 +532,67 @@ export default function HomePage() {
             <p className="text-white/40 max-w-md mx-auto text-sm">Long-form technical guides written for engineers who want to actually understand how things work.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {DEEP_DIVES.map(({ title, category, color, tag, description, readTime }) => {
-              const slug = slugifyTitle(title);
-              const hasArticle = articleSlugs.has(slug);
-              const cardContent = (
-                <>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${tag}`}>{category}</span>
-                    <span className="text-[10px] text-white/25">{readTime}</span>
-                  </div>
-                  <h3 className="text-sm font-bold text-white mb-2 leading-snug">{title}</h3>
-                  <p className="text-xs text-white/40 leading-relaxed flex-1">{description}</p>
-                  <div className="mt-4 flex items-center gap-1 text-[10px] text-white/25 group-hover:text-white/55 transition-colors">
-                    {hasArticle ? (
-                      <>Read article <ChevronRight className="w-2.5 h-2.5" /></>
-                    ) : (
-                      <span className="text-white/20">Coming soon</span>
-                    )}
-                  </div>
-                </>
-              );
-
-              return hasArticle ? (
+            {articleMetas.filter((m) => !m.track).map((meta) => {
+              const { color, tag } = getCategoryStyle(meta.category);
+              return (
                 <Link
-                  key={title}
-                  to={`/articles/${slug}`}
+                  key={meta.slug}
+                  to={`/articles/${meta.slug}`}
                   className={`group p-5 rounded-xl border ${color} bg-white/[0.02] hover:bg-white/[0.05] hover:shadow-lg hover:shadow-black/20 transition-all duration-200 flex flex-col`}
                 >
-                  {cardContent}
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${tag}`}>{meta.category}</span>
+                    <span className="text-[10px] text-white/25">{meta.readTime}</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white mb-2 leading-snug">{meta.title}</h3>
+                  <p className="text-xs text-white/40 leading-relaxed flex-1">{meta.description}</p>
+                  <div className="mt-4 flex items-center gap-1 text-[10px] text-white/25 group-hover:text-white/55 transition-colors">
+                    Read article <ChevronRight className="w-2.5 h-2.5" />
+                  </div>
                 </Link>
-              ) : (
-                <article
-                  key={title}
-                  className={`p-5 rounded-xl border ${color} bg-white/[0.02] flex flex-col opacity-60`}
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* DOMAIN TRACK */}
+      <section id="domain-track" className="py-20 border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 mb-3 px-3 py-1 rounded-full border border-rose-500/20 bg-rose-500/[0.06] text-xs text-rose-300">
+              <Building2 className="w-3 h-3" />
+              Domain Platform Builder Track
+            </div>
+            <h2 className="text-3xl font-bold text-white mb-3">Build a domain intelligence platform</h2>
+            <p className="text-white/40 max-w-lg mx-auto text-sm">A four-part series taking you from the platform concept through knowledge graphs, vertical RAG, and domain tools.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {DOMAIN_TRACK_ORDER.map((slug, idx) => {
+              const meta = articleMetas.find((m) => m.slug === slug);
+              if (!meta) return null;
+              const { color, tag } = getCategoryStyle(meta.category);
+              return (
+                <Link
+                  key={slug}
+                  to={`/articles/${slug}`}
+                  className={`group p-6 rounded-xl border ${color} bg-white/[0.02] hover:bg-white/[0.05] hover:shadow-lg hover:shadow-black/20 transition-all duration-200 flex items-start gap-4`}
                 >
-                  {cardContent}
-                </article>
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg border border-rose-500/30 bg-rose-500/10 flex items-center justify-center text-sm font-bold text-rose-300">
+                    {idx + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${tag}`}>{meta.category}</span>
+                      <span className="text-[10px] text-white/25">{meta.readTime}</span>
+                    </div>
+                    <h3 className="text-sm font-bold text-white mb-1.5 leading-snug">{meta.title}</h3>
+                    <p className="text-xs text-white/40 leading-relaxed">{meta.description}</p>
+                    <div className="mt-3 flex items-center gap-1 text-[10px] text-white/25 group-hover:text-white/55 transition-colors">
+                      Read article <ChevronRight className="w-2.5 h-2.5" />
+                    </div>
+                  </div>
+                </Link>
               );
             })}
           </div>
