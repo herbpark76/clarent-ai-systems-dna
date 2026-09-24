@@ -90,11 +90,11 @@ Always capture "Community AI Workflow" and "Roundtable" stories as use_case entr
 
 DUPLICATE DETECTION:
 You will also receive a list of existing entries from the last 30 days, each with an id, title, type, system_layer, and model_name.
-For each item you extract, compare it against the existing entries. If an item covers the same story or the same model release as an existing entry (same type AND similar topic/title, or same model_name for model_release), set:
-   - duplicate_of_id: the id of the existing entry
-   - duplicate_of_title: the title of the existing entry
-If it is NOT a duplicate, set duplicate_of_id to null.
-When in doubt, do NOT flag as duplicate — only flag when the overlap is clear.
+For each item you extract, compare it against the existing entries. Only flag an item as a duplicate if it covers the SAME SPECIFIC EVENT or ANNOUNCEMENT as an existing entry — e.g. the same model release announcement, the same funding round, the same product launch, the same policy decision. 
+Do NOT flag as duplicate just because two entries mention the same company, the same product, or the same general topic. Different developments about the same product or company are SEPARATE entries, not duplicates.
+   - If it IS a duplicate of the same event/announcement: set duplicate_of_id to the id of the existing entry and duplicate_of_title to the existing entry's title.
+   - If it is NOT a duplicate: set duplicate_of_id to null.
+When in doubt, do NOT flag as duplicate — only flag when both entries are clearly reporting the same specific event.
 
 You MUST call the save_entries tool with your results. Do not output any text.`;
 

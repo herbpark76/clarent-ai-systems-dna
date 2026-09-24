@@ -122,6 +122,12 @@ function getSources(entry: SignalEntry): SourceObj[] {
   return [];
 }
 
+function getSourceDate(entry: SignalEntry): string | null {
+  const sources = getSources(entry);
+  if (sources.length > 0 && sources[0].date) return sources[0].date;
+  return entry.source_date || null;
+}
+
 // ── Entry Card ─────────────────────────────────────────
 function EntryCard({
   entry, onUpdate, onDelete, onMerge, onKeepSeparate, onDiscard, allEntries,
@@ -144,6 +150,8 @@ function EntryCard({
   const isPossibleDup = entry.duplicate_status === 'possible' && entry.duplicate_of;
   const dupTarget = isPossibleDup ? allEntries.find((e) => e.id === entry.duplicate_of) : null;
   const sources = getSources(entry);
+  const sourceDate = getSourceDate(entry);
+  const [showDupTarget, setShowDupTarget] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -180,7 +188,7 @@ function EntryCard({
           </span>
         )}
         <span className="text-[10px] text-white/25 ml-auto">
-          {new Date(entry.created_at).toLocaleDateString()}
+          {sourceDate || new Date(entry.created_at).toLocaleDateString()}
         </span>
         <button onClick={() => setExpanded(!expanded)} className="p-0.5 text-white/30 hover:text-white/70 transition-colors">
           <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -191,8 +199,30 @@ function EntryCard({
       {isPossibleDup && (
         <div className="px-4 py-2.5 bg-amber-500/[0.06] border-b border-amber-500/10">
           <p className="text-xs text-amber-300/80 mb-2">
-            Possible update to: <span className="font-semibold">{dupTarget?.title || 'existing entry'}</span>
+            Possible update to:{' '}
+            {dupTarget ? (
+              <button onClick={() => setShowDupTarget(!showDupTarget)} className="font-semibold text-amber-200 hover:text-amber-100 underline decoration-amber-500/30 underline-offset-2 transition-colors text-left">
+                {dupTarget.title}
+              </button>
+            ) : (
+              <span className="font-semibold">a previously published entry</span>
+            )}
           </p>
+          {showDupTarget && dupTarget && (
+            <div className="mb-2 px-3 py-2 rounded-md bg-amber-500/[0.04] border border-amber-500/10">
+              <p className="text-[10px] text-white/30 uppercase tracking-wide font-semibold mb-0.5">Existing entry</p>
+              <p className="text-xs text-white/60 leading-relaxed">{dupTarget.summary}</p>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${TYPE_COLORS[dupTarget.type]}`}>{TYPE_LABELS[dupTarget.type]}</span>
+                {dupTarget.system_layer && (
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${LAYER_COLORS[dupTarget.system_layer]}`}>{LAYER_LABELS[dupTarget.system_layer]}</span>
+                )}
+                {dupTarget.model_name && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/10 text-cyan-300">{dupTarget.model_name}</span>
+                )}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <button onClick={() => onMerge(entry.id, entry.duplicate_of!)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[10px] font-semibold hover:bg-blue-500/30 transition-all">
@@ -390,7 +420,7 @@ function ModelTrackerCard({ entry }: { entry: SignalEntry }) {
         <span className="text-sm font-bold text-white">{entry.model_name}</span>
         {entry.vendor && <span className="text-[10px] text-white/40">by {entry.vendor}</span>}
         <span className="text-[10px] text-white/25 ml-auto">
-          {new Date(entry.created_at).toLocaleDateString()}
+          {getSourceDate(entry) || new Date(entry.created_at).toLocaleDateString()}
         </span>
       </div>
       <div className="px-4 py-3">
