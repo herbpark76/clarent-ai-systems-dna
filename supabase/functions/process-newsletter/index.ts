@@ -15,6 +15,42 @@ const ADMIN_EMAIL = "hpark76@gmail.com";
 
 const MIN_EXTRACTED_TEXT = 500;
 
+interface SourceObj {
+  name: string | null;
+  date: string | null;
+  url: string | null;
+}
+
+interface RecentEntry {
+  id: string;
+  title: string;
+  type: string;
+  system_layer: string;
+  model_name: string | null;
+}
+
+interface ProcessedEntry {
+  type: string;
+  system_layer: string;
+  title: string;
+  summary: string;
+  why_it_matters?: string;
+  how_its_built?: string;
+  business_angle?: string;
+  steps?: Array<{ text: string; prompt?: string }>;
+  tags?: string[];
+  role_tags?: string[];
+  model_name?: string;
+  vendor?: string;
+  benchmark_score?: string;
+  price_input?: string;
+  price_output?: string;
+  source_url?: string;
+  // Duplicate detection fields filled by Claude
+  duplicate_of_id?: string | null;
+  duplicate_of_title?: string | null;
+}
+
 const SYSTEM_PROMPT = `You are an AI systems analyst for "Signal Desk" by Clarent, a learning platform that teaches how modern AI systems are built.
 
 You receive raw newsletter text and must extract individual AI news items, turning each into a structured learning entry.
@@ -39,27 +75,16 @@ INSTRUCTIONS:
 4. Keep summaries short and rewritten — never paste source text.
 5. If the newsletter contains no genuine AI news items, return an empty array.
 
+DUPLICATE DETECTION:
+You will also receive a list of existing entries from the last 30 days, each with an id, title, type, system_layer, and model_name.
+For each item you extract, compare it against the existing entries. If an item covers the same story or the same model release as an existing entry (same type AND similar topic/title), set:
+   - duplicate_of_id: the id of the existing entry
+   - duplicate_of_title: the title of the existing entry
+If it is NOT a duplicate, set duplicate_of_id to null.
+When in doubt, do NOT flag as duplicate — only flag when the overlap is clear.
+
 Return ONLY a JSON object: { "entries": [ ... ] }
 Do not include markdown, commentary, or explanation outside the JSON.`;
-
-interface ProcessedEntry {
-  type: string;
-  system_layer: string;
-  title: string;
-  summary: string;
-  why_it_matters?: string;
-  how_its_built?: string;
-  business_angle?: string;
-  steps?: Array<{ text: string; prompt?: string }>;
-  tags?: string[];
-  role_tags?: string[];
-  model_name?: string;
-  vendor?: string;
-  benchmark_score?: string;
-  price_input?: string;
-  price_output?: string;
-  source_url?: string;
-}
 
 const VALID_TYPES = new Set([
   "news", "tutorial", "use_case", "tool", "model_release", "risk",
@@ -88,7 +113,6 @@ function stripTrackingParams(rawUrl: string): string {
 
 // ── HTML text extraction ───────────────────────────────
 function extractReadableText(html: string): string {
-  // Remove script, style, nav, footer, header, aside, form blocks entirely
   let cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -99,16 +123,12 @@ function extractReadableText(html: string): string {
     .replace(/<form[\s\S]*?<\/form>/gi, " ")
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ");
 
-  // Convert headings and list items to text with line breaks
   cleaned = cleaned
     .replace(/<\/(h[1-6]|li|p|div|br|tr)>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n");
 
-  // Keep link text (strip the tag, keep inner text)
-  // Remove all remaining tags
   cleaned = cleaned.replace(/<[^>]+>/g, " ");
 
-  // Decode common HTML entities
   cleaned = cleaned
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -118,7 +138,6 @@ function extractReadableText(html: string): string {
     .replace(/&nbsp;/g, " ")
     .replace(/&#x2F;/g, "/");
 
-  // Collapse whitespace
   cleaned = cleaned
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
@@ -132,12 +151,9 @@ function extractSiteName(url: string): string | null {
   try {
     const u = new URL(url);
     const host = u.hostname.replace(/^www\./, "");
-    // Use the second-to-last part of the domain as the site name
-    // e.g. "therundown.ai" -> "The Rundown AI", "tldr.tech" -> "TLDR"
     const parts = host.split(".");
     if (parts.length < 2) return host;
     const base = parts[parts.length - 2];
-    // Simple heuristics for known newsletters
     const known: Record<string, string> = {
       tldr: "TLDR AI",
       therundown: "The Rundown AI",
@@ -145,7 +161,6 @@ function extractSiteName(url: string): string | null {
       natter: "Natter",
     };
     if (known[base.toLowerCase()]) return known[base.toLowerCase()];
-    // Capitalize the base domain part
     return base.charAt(0).toUpperCase() + base.slice(1);
   } catch {
     return null;
@@ -154,29 +169,31 @@ function extractSiteName(url: string): string | null {
 
 // ── Extract publish date from HTML ─────────────────────
 function extractPublishDate(html: string): string | null {
-  // Try meta property="article:published_time"
   let match = html.match(/<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["']/i);
   if (match) return match[1].slice(0, 10);
 
-  // Try meta name="date" or name="publish_date"
   match = html.match(/<meta[^>]+name=["'](?:date|publish_date|publication_date)["'][^>]+content=["']([^"']+)["']/i);
   if (match) return match[1].slice(0, 10);
 
-  // Try <time datetime="...">
   match = html.match(/<time[^>]+datetime=["']([^"']+)["']/i);
   if (match) return match[1].slice(0, 10);
 
-  // Try JSON-LD datePublished
   match = html.match(/"datePublished"\s*:\s*"([^"]+)"/);
   if (match) return match[1].slice(0, 10);
 
   return null;
 }
 
-function sanitizeEntry(raw: ProcessedEntry): ProcessedEntry | null {
+function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEntry | null {
   if (!raw.title || !raw.summary) return null;
   if (!VALID_TYPES.has(raw.type)) return null;
   if (!VALID_LAYERS.has(raw.system_layer)) return null;
+
+  // Validate duplicate_of_id — must be a real recent entry id
+  let dupId: string | null = null;
+  if (raw.duplicate_of_id && recentIds.has(raw.duplicate_of_id)) {
+    dupId = raw.duplicate_of_id;
+  }
 
   return {
     type: raw.type,
@@ -195,6 +212,8 @@ function sanitizeEntry(raw: ProcessedEntry): ProcessedEntry | null {
     price_input: raw.price_input || null,
     price_output: raw.price_output || null,
     source_url: raw.source_url || null,
+    duplicate_of_id: dupId,
+    duplicate_of_title: dupId ? (raw.duplicate_of_title || null) : null,
   };
 }
 
@@ -238,7 +257,6 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Fetch the page server-side
       let fetchResp: Response;
       try {
         fetchResp = await fetch(cleanedUrl, {
@@ -272,7 +290,6 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Auto-fill source info from the page
       autoSourceName = extractSiteName(cleanedUrl);
       autoSourceDate = extractPublishDate(html);
     } else if (text && typeof text === "string") {
@@ -298,9 +315,36 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ── Resolve source fields (user override > auto > null) ──
+    // ── Resolve source fields ───────────────────────────
     const finalSourceName = source_name || autoSourceName || null;
     const finalSourceDate = source_date || autoSourceDate || null;
+    const finalSourceUrl = cleanedUrl || null;
+
+    // ── Fetch recent entries for duplicate detection ────
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoff = thirtyDaysAgo.toISOString();
+
+    const { data: recentData } = await supabase
+      .from("signal_desk_entries")
+      .select("id, title, type, system_layer, model_name")
+      .gte("created_at", cutoff)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    const recentEntries: RecentEntry[] = (recentData as RecentEntry[]) || [];
+    const recentIds = new Set(recentEntries.map((e) => e.id));
+
+    // Build the recent-entries context for Claude
+    const recentContext = recentEntries.length > 0
+      ? recentEntries.map((e) =>
+          `- id: ${e.id} | title: "${e.title}" | type: ${e.type} | layer: ${e.system_layer}${e.model_name ? ` | model: ${e.model_name}` : ""}`
+        ).join("\n")
+      : "(no existing entries in the last 30 days)";
 
     // ── Call Claude ──────────────────────────────────────
     const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -317,7 +361,7 @@ Deno.serve(async (req: Request) => {
         messages: [
           {
             role: "user",
-            content: `Newsletter source: ${finalSourceName || "Unknown"}\nDate: ${finalSourceDate || "Unknown"}\n\nNewsletter text:\n\n${inputText}`,
+            content: `Newsletter source: ${finalSourceName || "Unknown"}\nDate: ${finalSourceDate || "Unknown"}\n\nEXISTING ENTRIES FROM LAST 30 DAYS (use for duplicate detection):\n${recentContext}\n\nNewsletter text:\n\n${inputText}`,
           },
         ],
       }),
@@ -347,7 +391,7 @@ Deno.serve(async (req: Request) => {
 
     const rawEntries = Array.isArray(parsed.entries) ? parsed.entries : [];
     const cleanEntries = rawEntries
-      .map(sanitizeEntry)
+      .map((e) => sanitizeEntry(e, recentIds))
       .filter((e): e is NonNullable<typeof e> => e !== null);
 
     if (cleanEntries.length === 0) {
@@ -357,38 +401,45 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ── Insert as drafts into Supabase ──────────────────
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    // ── Build source objects and insert ─────────────────
+    const newSource: SourceObj = {
+      name: finalSourceName,
+      date: finalSourceDate,
+      url: finalSourceUrl,
+    };
 
-    const rows = cleanEntries.map((e) => ({
-      type: e.type,
-      system_layer: e.system_layer,
-      title: e.title,
-      summary: e.summary,
-      why_it_matters: e.why_it_matters,
-      how_its_built: e.how_its_built,
-      business_angle: e.business_angle,
-      steps: JSON.stringify(e.steps || []),
-      tags: e.tags || [],
-      role_tags: e.role_tags || [],
-      model_name: e.model_name,
-      vendor: e.vendor,
-      benchmark_score: e.benchmark_score,
-      price_input: e.price_input,
-      price_output: e.price_output,
-      // Auto-fill source_url with the cleaned URL; fall back to any URL Claude found in the text
-      source_url: cleanedUrl || e.source_url || null,
-      source_name: finalSourceName,
-      source_date: finalSourceDate,
-      status: "draft",
-    }));
+    const rows = cleanEntries.map((e) => {
+      const isDup = !!e.duplicate_of_id;
+      return {
+        type: e.type,
+        system_layer: e.system_layer,
+        title: e.title,
+        summary: e.summary,
+        why_it_matters: e.why_it_matters,
+        how_its_built: e.how_its_built,
+        business_angle: e.business_angle,
+        steps: JSON.stringify(e.steps || []),
+        tags: e.tags || [],
+        role_tags: e.role_tags || [],
+        model_name: e.model_name,
+        vendor: e.vendor,
+        benchmark_score: e.benchmark_score,
+        price_input: e.price_input,
+        price_output: e.price_output,
+        source_url: finalSourceUrl || e.source_url || null,
+        source_name: finalSourceName,
+        source_date: finalSourceDate,
+        sources: JSON.stringify([newSource]),
+        duplicate_of: isDup ? e.duplicate_of_id : null,
+        duplicate_status: isDup ? "possible" : "none",
+        status: "draft",
+      };
+    });
 
     const { data, error } = await supabase
       .from("signal_desk_entries")
       .insert(rows)
-      .select("id, title, type, system_layer, status");
+      .select("id, title, type, system_layer, status, duplicate_of, duplicate_status");
 
     if (error) {
       return new Response(
@@ -397,8 +448,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Build a summary that includes duplicate info for the frontend
+    const duplicates = (data || []).filter((e: any) => e.duplicate_of);
+    const newEntries = (data || []).filter((e: any) => !e.duplicate_of);
+
     return new Response(
-      JSON.stringify({ entries: data, count: data.length }),
+      JSON.stringify({
+        entries: data,
+        count: data.length,
+        new_count: newEntries.length,
+        duplicate_count: duplicates.length,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
