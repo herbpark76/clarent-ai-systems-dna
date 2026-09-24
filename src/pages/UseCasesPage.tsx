@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Lightbulb, Search, Loader2, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedByType, normalizeSteps, normalizeStringArray, getSourceDate,
@@ -16,13 +17,13 @@ function UseCaseCard({ entry }: { entry: SignalEntry }) {
   const date = getSourceDate(entry);
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 hover:border-white/[0.15] transition-all">
+    <Link to={`/signal-desk/${entry.slug}`} className="group block rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 hover:border-white/[0.15] transition-all">
       <div className="flex items-center gap-2 mb-2">
         <TypeBadge type={entry.type} />
         <LayerBadge layer={entry.system_layer} />
         {date && <span className="text-[10px] text-white/25 ml-auto">{date}</span>}
       </div>
-      <h3 className="text-sm font-bold text-white mb-2 leading-snug">{entry.title}</h3>
+      <h3 className="text-sm font-bold text-white mb-2 leading-snug group-hover:text-cyan-300 transition-colors">{entry.title}</h3>
 
       <div className="space-y-2 mb-3">
         {entry.summary && (
@@ -67,7 +68,7 @@ function UseCaseCard({ entry }: { entry: SignalEntry }) {
       )}
 
       <SourcesList entry={entry} />
-    </div>
+    </Link>
   );
 }
 

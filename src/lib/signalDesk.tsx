@@ -17,6 +17,7 @@ export interface SourceObj {
 export interface SignalEntry {
   id: string;
   created_at: string;
+  slug: string;
   type: EntryType;
   system_layer: SystemLayer | null;
   title: string;
@@ -172,6 +173,18 @@ export async function fetchLatestPublished(limit: number = 6): Promise<SignalEnt
     .limit(limit);
   if (error) throw error;
   return (data || []) as SignalEntry[];
+}
+
+export async function fetchPublishedBySlug(slug: string): Promise<SignalEntry | null> {
+  const { data, error } = await supabase
+    .from('signal_desk_entries')
+    .select('*')
+    .eq('slug', slug)
+    .eq('status', 'published')
+    .in('duplicate_status', VISIBLE_STATUSES)
+    .maybeSingle();
+  if (error) throw error;
+  return data as SignalEntry | null;
 }
 
 export function dedupeByModelName(entries: SignalEntry[]): SignalEntry[] {

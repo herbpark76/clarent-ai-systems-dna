@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ShieldAlert, Loader2, Briefcase } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedByType, getSourceDate, TypeBadge, LayerBadge, SourcesList,
@@ -29,7 +30,7 @@ function RiskCard({ entry }: { entry: SignalEntry }) {
           <LayerBadge layer={entry.system_layer} />
           {date && <span className="text-[10px] text-white/25 ml-auto">{date}</span>}
         </div>
-        <h3 className="text-sm font-bold text-white mb-2 leading-snug">{entry.title}</h3>
+        <h3 className="text-sm font-bold text-white mb-2 leading-snug hover:text-cyan-300 transition-colors"><Link to={`/signal-desk/${entry.slug}`}>{entry.title}</Link></h3>
         <p className="text-xs text-white/50 leading-relaxed mb-3">{entry.summary}</p>
 
         {entry.why_it_matters && (

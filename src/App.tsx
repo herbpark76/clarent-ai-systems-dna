@@ -4,6 +4,7 @@ import ArticlePage from './components/ArticlePage';
 import ConceptPage from './components/ConceptPage';
 import AdminSignalDesk from './pages/AdminSignalDesk';
 import SignalDeskPage from './pages/SignalDeskPage';
+import EntryDetailPage from './pages/EntryDetailPage';
 import LabsPage from './pages/LabsPage';
 import UseCasesPage from './pages/UseCasesPage';
 import ModelsPage from './pages/ModelsPage';
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/concepts/:slug" element={<ConceptPage />} />
         <Route path="/admin/signal-desk" element={<AdminSignalDesk />} />
         <Route path="/signal-desk" element={<SignalDeskPage />} />
+        <Route path="/signal-desk/:slug" element={<EntryDetailPage />} />
         <Route path="/labs" element={<LabsPage />} />
         <Route path="/use-cases" element={<UseCasesPage />} />
         <Route path="/models" element={<ModelsPage />} />

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Newspaper, ChevronRight, Layers, Loader2, ArrowRight } from 'lucide-react';
+import { Newspaper, ChevronRight, Layers, Loader2, ArrowLeft } from 'lucide-react';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedEntries, getSourceDate, TypeBadge, LayerBadge, SourcesList,
@@ -14,7 +14,7 @@ const LAYER_ORDER: SystemLayer[] = [
 function EntryMiniCard({ entry }: { entry: SignalEntry }) {
   const date = getSourceDate(entry);
   return (
-    <Link to={`/signal-desk?entry=${entry.id}`} className="block group">
+    <Link to={`/signal-desk/${entry.slug}`} className="block group">
       <div className="flex items-start gap-2 py-1.5">
         <div className="flex flex-col gap-1 flex-1 min-w-0">
           <span className="text-xs font-medium text-white/80 group-hover:text-white transition-colors leading-snug line-clamp-2">{entry.title}</span>
@@ -60,7 +60,7 @@ function LayerCard({
 function EntryDetailCard({ entry }: { entry: SignalEntry }) {
   const date = getSourceDate(entry);
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
+    <Link to={`/signal-desk/${entry.slug}`} className="block rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 hover:bg-white/[0.05] hover:border-white/[0.15] transition-all">
       <div className="flex items-center gap-2 mb-2">
         <TypeBadge type={entry.type} />
         <LayerBadge layer={entry.system_layer} />
@@ -81,7 +81,7 @@ function EntryDetailCard({ entry }: { entry: SignalEntry }) {
         </div>
       )}
       <SourcesList entry={entry} />
-    </div>
+    </Link>
   );
 }
 
@@ -89,17 +89,10 @@ function SignalDeskInner() {
   const [entries, setEntries] = useState<SignalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<SystemLayer | null | 'all'>('all');
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     document.title = 'Signal Desk — AI Systems DNA';
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const entryId = params.get('entry');
-    if (entryId) setSelectedEntryId(entryId);
   }, []);
 
   useEffect(() => {
@@ -122,8 +115,6 @@ function SignalDeskInner() {
     : filter === null
       ? industryEntries
       : entries.filter((e) => e.system_layer === filter);
-
-  const selectedEntry = selectedEntryId ? entries.find((e) => e.id === selectedEntryId) : null;
 
   if (loading) {
     return (
@@ -166,23 +157,14 @@ function SignalDeskInner() {
           Every AI headline is a clue about how these systems are built. Here's the latest news, sorted by the part of the system it touches.
         </p>
 
-        {selectedEntry ? (
-          <div className="max-w-2xl">
-            <button onClick={() => setSelectedEntryId(null)} className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 mb-4 transition-colors">
-              <ArrowRight className="w-3 h-3 rotate-180" /> Back to Signal Desk
-            </button>
-            <EntryDetailCard entry={selectedEntry} />
-          </div>
-        ) : filter !== 'all' ? (
+        {filter !== 'all' ? (
           <>
             <button onClick={() => setFilter('all')} className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 mb-4 transition-colors">
-              <ArrowRight className="w-3 h-3 rotate-180" /> All layers
+              <ArrowLeft className="w-3 h-3" /> All layers
             </button>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {filtered.map((entry) => (
-                <div key={entry.id} onClick={() => setSelectedEntryId(entry.id)} className="cursor-pointer">
-                  <EntryDetailCard entry={entry} />
-                </div>
+                <EntryDetailCard key={entry.id} entry={entry} />
               ))}
             </div>
           </>

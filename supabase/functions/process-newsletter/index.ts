@@ -114,6 +114,15 @@ const VALID_LAYERS = new Set([
 ]);
 const NULLABLE_LAYER_TYPES = new Set(["industry"]);
 
+// ── Slug generation ───────────────────────────────────
+function generateBaseSlug(title: string): string {
+  let slug = title.toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) slug = "entry";
+  return slug.slice(0, 80);
+}
+
 // ── URL cleaning ───────────────────────────────────────
 function stripTrackingParams(rawUrl: string): string {
   try {
@@ -569,8 +578,29 @@ Deno.serve(async (req: Request) => {
       url: finalSourceUrl,
     };
 
+    // ── Generate unique slugs for each entry ──────────
+    // Collect existing slugs that start with the same base to detect collisions
+    const baseSlugs = cleanEntries.map((e) => generateBaseSlug(e.title));
+    const uniqueBaseSlugs = [...new Set(baseSlugs)];
+    const { data: existingSlugs } = await supabase
+      .from("signal_desk_entries")
+      .select("slug")
+      .in("slug", uniqueBaseSlugs);
+    const usedSlugs = new Set((existingSlugs || []).map((r: any) => r.slug));
+    // Also track slugs within this batch to avoid intra-batch collisions
+    const batchSlugs = new Set<string>();
+
     const rows = cleanEntries.map((e) => {
       const isDup = !!e.duplicate_of_id;
+      const baseSlug = generateBaseSlug(e.title);
+      let finalSlug = baseSlug;
+      let suffix = 2;
+      while (usedSlugs.has(finalSlug) || batchSlugs.has(finalSlug)) {
+        finalSlug = `${baseSlug}-${suffix}`;
+        suffix++;
+      }
+      batchSlugs.add(finalSlug);
+      usedSlugs.add(finalSlug);
       return {
         type: e.type,
         system_layer: e.system_layer,
@@ -594,6 +624,7 @@ Deno.serve(async (req: Request) => {
         sources: [newSource],
         duplicate_of: isDup ? e.duplicate_of_id : null,
         duplicate_status: isDup ? "possible" : "none",
+        slug: finalSlug,
         status: "draft",
       };
     });

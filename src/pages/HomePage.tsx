@@ -147,7 +147,7 @@ function LatestSignalDeskStrip() {
           {entries.map((entry) => {
             const date = getSourceDate(entry);
             return (
-              <Link key={entry.id} to="/signal-desk" className="group p-4 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.15] transition-all duration-200 flex flex-col">
+              <Link key={entry.id} to={`/signal-desk/${entry.slug}`} className="group p-4 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.15] transition-all duration-200 flex flex-col">
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TYPE_COLORS[entry.type]}`}>
                     {TYPE_LABELS[entry.type]}

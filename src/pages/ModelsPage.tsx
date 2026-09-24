@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Cpu, Loader2, ArrowUpDown, Trophy, DollarSign, TrendingUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedByType, dedupeByModelName, getSourceDate,
@@ -64,7 +65,7 @@ function ModelTable({ entries, sortKey, sortDir, onSort }: {
             const date = getSourceDate(entry);
             return (
               <tr key={entry.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                <td className="px-3 py-2.5 text-sm font-medium text-white">{entry.model_name || '—'}</td>
+                <td className="px-3 py-2.5 text-sm font-medium text-white">{entry.model_name ? <Link to={`/signal-desk/${entry.slug}`} className="hover:text-cyan-300 transition-colors">{entry.model_name}</Link> : '—'}</td>
                 <td className="px-3 py-2.5 text-xs text-white/50">{entry.vendor || '—'}</td>
                 <td className="px-3 py-2.5">
                   {entry.benchmark_score != null ? (
@@ -121,7 +122,7 @@ function RecommendationCard({ entries }: { entries: SignalEntry[] }) {
       </div>
       {model ? (
         <>
-          <div className="text-sm font-bold text-white mb-0.5">{model.model_name}</div>
+          <div className="text-sm font-bold text-white mb-0.5"><Link to={`/signal-desk/${model.slug}`} className="hover:text-cyan-300 transition-colors">{model.model_name}</Link></div>
           <div className="text-[10px] text-white/35">{detail}</div>
         </>
       ) : (

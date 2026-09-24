@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { FlaskConical, ChevronDown, Copy, Check, Loader2 } from 'lucide-react';
 import NavBar from '../components/NavBar';
 import {
@@ -48,7 +49,7 @@ function LabCard({
       <button onClick={onToggle} className="w-full flex items-center gap-2 px-4 py-3 text-left">
         <span className="flex-shrink-0"><TypeBadge type={entry.type} /></span>
         <LayerBadge layer={entry.system_layer} />
-        <span className="text-sm font-bold text-white flex-1 truncate">{entry.title}</span>
+        <Link to={`/signal-desk/${entry.slug}`} onClick={(e) => e.stopPropagation()} className="text-sm font-bold text-white flex-1 truncate hover:text-cyan-300 transition-colors">{entry.title}</Link>
         {date && <span className="text-[10px] text-white/25 hidden sm:block">{date}</span>}
         {steps.length > 0 && (
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${pct === 100 ? 'bg-green-500/15 text-green-300' : 'bg-white/[0.05] text-white/40'}`}>
