@@ -1,0 +1,49 @@
+{
+  "slug": "how-tool-calling-works",
+  "questions": [
+    {
+      "question": "In tool calling, who actually executes the tool?",
+      "options": [
+        "The language model",
+        "The user",
+        "Your application code",
+        "The embedding model"
+      ],
+      "answer": 2,
+      "explanation": "The model only writes a structured request; your code runs the tool and returns the result."
+    },
+    {
+      "question": "What does the model mainly rely on to choose which tool to call?",
+      "options": [
+        "The tool's response time",
+        "The order the tools were defined in",
+        "The tool's source code",
+        "The tool's name and description"
+      ],
+      "answer": 3,
+      "explanation": "Names and descriptions are the interface. Vague descriptions lead to wrong tool choices."
+    },
+    {
+      "question": "'What tax did we charge on invoice 88412?' is best handled by…",
+      "options": [
+        "Fine-tuning",
+        "A tool call to the system of record",
+        "A longer prompt",
+        "RAG over policy documents"
+      ],
+      "answer": 1,
+      "explanation": "Exact, live data comes from systems via tools; RAG is for document knowledge."
+    },
+    {
+      "question": "How should you treat the arguments a model passes to a tool?",
+      "options": [
+        "Send them to a second model",
+        "Ignore them and use defaults",
+        "Validate them like any user input before executing",
+        "Trust them — the model generated them"
+      ],
+      "answer": 2,
+      "explanation": "Arguments are suggestions from the model; validate types, ranges, and permissions."
+    }
+  ]
+}

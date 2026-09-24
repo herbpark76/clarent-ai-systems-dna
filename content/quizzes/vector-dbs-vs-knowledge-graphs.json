@@ -1,0 +1,49 @@
+{
+  "slug": "vector-dbs-vs-knowledge-graphs",
+  "questions": [
+    {
+      "question": "How does a vector database find relevant information?",
+      "options": [
+        "By exact keyword match only",
+        "By following relationships between entities",
+        "By similarity of meaning between embeddings",
+        "By date order"
+      ],
+      "answer": 2,
+      "explanation": "Vector databases compare embeddings, so passages with similar meaning are found even when the words differ."
+    },
+    {
+      "question": "Which question is a knowledge graph best suited for?",
+      "options": [
+        "Which products mapped to code X are sold to customers in states where code X changed this year?",
+        "Translate this policy into Spanish",
+        "What do our memos say about software maintenance?",
+        "Summarize this document"
+      ],
+      "answer": 0,
+      "explanation": "Multi-step questions that chain relationships are a graph's strength."
+    },
+    {
+      "question": "What is a key weakness of knowledge graphs?",
+      "options": [
+        "They can't handle relationships",
+        "They only store images",
+        "They require designing a domain model and effort to build and maintain",
+        "They can't explain their answers"
+      ],
+      "answer": 2,
+      "explanation": "Graphs need a schema and ongoing maintenance, which vector stores largely avoid."
+    },
+    {
+      "question": "What is a practical path for most organizations?",
+      "options": [
+        "Start with vector search over documents, then add a graph where relationship questions are answered poorly",
+        "Pick one and never combine them",
+        "Build a complete knowledge graph before anything else",
+        "Use only keyword search"
+      ],
+      "answer": 0,
+      "explanation": "Begin simple, find where vectors fall short, and introduce a graph for that part of the domain."
+    }
+  ]
+}

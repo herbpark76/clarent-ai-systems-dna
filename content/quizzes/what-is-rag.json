@@ -1,0 +1,49 @@
+{
+  "slug": "what-is-rag",
+  "questions": [
+    {
+      "question": "What does RAG add to a language model at answer time?",
+      "options": [
+        "Relevant passages retrieved from your own sources, placed into the prompt",
+        "New training data baked into the model's weights",
+        "A larger context window",
+        "A second model that checks the answer"
+      ],
+      "answer": 0,
+      "explanation": "RAG retrieves relevant material and puts it in the prompt so the model answers from it, without retraining."
+    },
+    {
+      "question": "A model gives generic answers because it doesn't know your company's policies. Which approach fits best?",
+      "options": [
+        "Fine-tuning",
+        "A bigger model",
+        "RAG",
+        "Lower temperature"
+      ],
+      "answer": 2,
+      "explanation": "If the problem is 'the model doesn't know X,' use RAG. Fine-tuning is for changing behavior, tone, or format."
+    },
+    {
+      "question": "Why do most production RAG systems add keyword search alongside vector search?",
+      "options": [
+        "Embeddings are weak at exact identifiers like codes, part numbers, and citations",
+        "Keyword search is cheaper to host",
+        "Keyword search removes the need for chunking",
+        "Vector search can't handle long documents"
+      ],
+      "answer": 0,
+      "explanation": "Vector search captures meaning; keyword search guarantees exact terms match. Hybrid search gets both."
+    },
+    {
+      "question": "What is the most common root cause of wrong RAG answers?",
+      "options": [
+        "The answer was too long",
+        "Retrieval didn't bring back the right passage",
+        "The prompt was too short",
+        "The model's temperature is too high"
+      ],
+      "answer": 1,
+      "explanation": "If the right passage never reaches the prompt, no model can answer correctly. Measure retrieval separately from answers."
+    }
+  ]
+}

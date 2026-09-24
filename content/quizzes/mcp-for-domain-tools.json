@@ -1,0 +1,49 @@
+{
+  "slug": "mcp-for-domain-tools",
+  "questions": [
+    {
+      "question": "Why design tools around tasks rather than raw API endpoints?",
+      "options": [
+        "It uses fewer servers",
+        "Models use fewer, task-shaped tools in the domain's language more reliably",
+        "Endpoints are always insecure",
+        "APIs can't be wrapped"
+      ],
+      "answer": 1,
+      "explanation": "Task-shaped tools with clear descriptions are easier for models to choose and call correctly."
+    },
+    {
+      "question": "What is a 'proposal tool'?",
+      "options": [
+        "A tool that proposes new tools",
+        "A read-only lookup",
+        "A tool that drafts a change for a human to review and approve",
+        "A tool that changes data directly"
+      ],
+      "answer": 2,
+      "explanation": "Proposals deliver most of the value of write access with far less risk."
+    },
+    {
+      "question": "How should an MCP server authenticate requests to domain systems?",
+      "options": [
+        "With one shared account that can see everything",
+        "As the actual user, enforcing their existing permissions",
+        "With an API key embedded in the prompt",
+        "It doesn't need authentication"
+      ],
+      "answer": 1,
+      "explanation": "Acting as the user keeps existing permissions and a proper audit trail."
+    },
+    {
+      "question": "What should a tool return when it can't find a record?",
+      "options": [
+        "A random record",
+        "A stack trace",
+        "Nothing",
+        "A clear error the model can act on, such as the expected format"
+      ],
+      "answer": 3,
+      "explanation": "Useful errors let the model recover and try again correctly."
+    }
+  ]
+}

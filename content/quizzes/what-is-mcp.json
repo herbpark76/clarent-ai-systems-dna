@@ -1,0 +1,49 @@
+{
+  "slug": "what-is-mcp",
+  "questions": [
+    {
+      "question": "What problem does MCP primarily solve?",
+      "options": [
+        "Models hallucinating facts",
+        "Every AI app needing its own custom integration to every system",
+        "Slow model responses",
+        "High token costs"
+      ],
+      "answer": 1,
+      "explanation": "MCP standardizes integrations: build a server once and any MCP-compatible app can use it."
+    },
+    {
+      "question": "In MCP, what is a 'server'?",
+      "options": [
+        "A program that exposes tools, resources, and prompts from some system",
+        "A vector database",
+        "The AI application the user talks to",
+        "The language model itself"
+      ],
+      "answer": 0,
+      "explanation": "Hosts are the AI apps; servers expose capabilities from systems like databases, SaaS products, or an ERP."
+    },
+    {
+      "question": "Which three kinds of things can an MCP server offer?",
+      "options": [
+        "Tools, resources, and prompts",
+        "Users, roles, and permissions",
+        "Models, embeddings, and indexes",
+        "Agents, memories, and plans"
+      ],
+      "answer": 0,
+      "explanation": "Tools are callable functions, resources are readable data, and prompts are reusable templates."
+    },
+    {
+      "question": "Why should you only connect MCP servers you trust?",
+      "options": [
+        "A server's tool descriptions and results go straight into the model's context and can try to manipulate it",
+        "MCP servers can change the model's weights",
+        "They cost more tokens",
+        "Untrusted servers are slower"
+      ],
+      "answer": 0,
+      "explanation": "A malicious or compromised server can inject instructions through its descriptions or results."
+    }
+  ]
+}

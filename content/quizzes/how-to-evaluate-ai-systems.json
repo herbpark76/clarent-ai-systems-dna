@@ -1,0 +1,49 @@
+{
+  "slug": "how-to-evaluate-ai-systems",
+  "questions": [
+    {
+      "question": "What is the foundation of AI evaluation?",
+      "options": [
+        "A test set of realistic inputs with a definition of what a good output looks like",
+        "The model vendor's benchmark scores",
+        "User satisfaction surveys",
+        "A dashboard of token usage"
+      ],
+      "answer": 0,
+      "explanation": "Everything else builds on a realistic test set with clear criteria for 'good.'"
+    },
+    {
+      "question": "Why measure retrieval separately from final answers in a RAG system?",
+      "options": [
+        "If the right passage never reaches the model, prompt changes can't fix it — you need to see where the failure is",
+        "Retrieval is always correct",
+        "Answers can't be measured",
+        "It's cheaper"
+      ],
+      "answer": 0,
+      "explanation": "Separating the two tells you whether to fix retrieval or generation."
+    },
+    {
+      "question": "What does 'faithfulness' (groundedness) measure?",
+      "options": [
+        "Whether the user liked the answer",
+        "Whether every claim is supported by the retrieved sources or tool results",
+        "Whether the answer is short",
+        "Whether the answer was fast"
+      ],
+      "answer": 1,
+      "explanation": "Faithful answers don't add claims beyond the provided evidence."
+    },
+    {
+      "question": "What should happen when you find a failure in production?",
+      "options": [
+        "Add it to the test set so it's checked on every future change",
+        "Delete the logs",
+        "Nothing, if it's rare",
+        "Switch models immediately"
+      ],
+      "answer": 0,
+      "explanation": "Every production failure becomes a regression test."
+    }
+  ]
+}

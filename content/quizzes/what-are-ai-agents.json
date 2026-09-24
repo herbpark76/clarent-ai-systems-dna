@@ -1,0 +1,49 @@
+{
+  "slug": "what-are-ai-agents",
+  "questions": [
+    {
+      "question": "What distinguishes an agent from a traditional workflow?",
+      "options": [
+        "Workflows can't use AI at all",
+        "In an agent, the model decides the next step at run time",
+        "Agents use a larger model",
+        "Agents never call tools"
+      ],
+      "answer": 1,
+      "explanation": "In a workflow the developer fixes the steps in advance; in an agent the model chooses each step based on what it observes."
+    },
+    {
+      "question": "Which task is the better fit for an agent rather than a fixed workflow?",
+      "options": [
+        "Routing incoming documents by type",
+        "Investigating why an unusual transaction was calculated a certain way",
+        "Sending a nightly report",
+        "Converting a file from CSV to JSON"
+      ],
+      "answer": 1,
+      "explanation": "Use an agent when you can't write down the steps in advance because each depends on what the last one found."
+    },
+    {
+      "question": "What's the recommended way to introduce an agent into a business process?",
+      "options": [
+        "Run it without evaluation to see what it does",
+        "Give it full write access so it can fix problems immediately",
+        "Start with a multi-agent system",
+        "Start read-only, log every step, and add actions with approval once it's reliable"
+      ],
+      "answer": 3,
+      "explanation": "Earn trust gradually: read-only first, then actions behind human approval."
+    },
+    {
+      "question": "Which of these is a common agent failure mode?",
+      "options": [
+        "Answering too quickly",
+        "Refusing to call tools",
+        "Using too few tokens",
+        "Looping on the same failing step"
+      ],
+      "answer": 3,
+      "explanation": "Agents can repeat failing steps; step limits and repetition detection help."
+    }
+  ]
+}

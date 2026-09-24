@@ -1,0 +1,49 @@
+{
+  "slug": "modeling-a-domain-knowledge-graph",
+  "questions": [
+    {
+      "question": "Where should a domain knowledge graph design start?",
+      "options": [
+        "From 20–30 real questions experts answer regularly",
+        "By extracting everything from documents",
+        "By choosing a graph database vendor",
+        "By modeling every table in the ERP"
+      ],
+      "answer": 0,
+      "explanation": "Design the smallest model that answers real expert questions."
+    },
+    {
+      "question": "Why put effective-from and effective-to dates on relationships?",
+      "options": [
+        "So the graph can answer what applied at a specific point in time and show what changed",
+        "To speed up queries",
+        "To save storage",
+        "Because graph databases require it"
+      ],
+      "answer": 0,
+      "explanation": "Domains change; 'as of' queries depend on history being preserved."
+    },
+    {
+      "question": "How should facts that a language model extracts from documents be treated?",
+      "options": [
+        "They shouldn't be used at all",
+        "As temporary and deleted weekly",
+        "As proposals with source and confidence, reviewed by experts where they matter",
+        "As authoritative"
+      ],
+      "answer": 2,
+      "explanation": "Extraction lowers cost, but extracted facts need provenance and review."
+    },
+    {
+      "question": "What is 'provenance' in a knowledge graph?",
+      "options": [
+        "The graph's visual layout",
+        "Where each fact came from and when it was loaded",
+        "The query language",
+        "The number of relationships"
+      ],
+      "answer": 1,
+      "explanation": "Provenance lets users verify answers and lets you trace bad data."
+    }
+  ]
+}

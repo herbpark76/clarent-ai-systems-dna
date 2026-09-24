@@ -1,0 +1,49 @@
+{
+  "slug": "building-a-domain-intelligence-platform",
+  "questions": [
+    {
+      "question": "What is a domain intelligence platform?",
+      "options": [
+        "A fine-tuned model",
+        "Shared capabilities — knowledge, system connections, reasoning, and quality controls — used by many AI applications in a domain",
+        "A data warehouse",
+        "A single chatbot for one team"
+      ],
+      "answer": 1,
+      "explanation": "It's shared infrastructure, so each new application builds on the same foundation."
+    },
+    {
+      "question": "In the knowledge layer, what do documents and a domain model each capture?",
+      "options": [
+        "Neither is needed if you have a large model",
+        "Documents capture structure; the domain model captures reasoning",
+        "Both capture the same thing",
+        "Documents capture reasoning; the domain model captures structure"
+      ],
+      "answer": 3,
+      "explanation": "Memos explain why; a graph of entities and relationships captures what connects to what."
+    },
+    {
+      "question": "If a system of record produces the authoritative answer, the AI should…",
+      "options": [
+        "Call the system rather than guess",
+        "Use RAG instead",
+        "Ask the user to calculate it",
+        "Estimate the answer to save time"
+      ],
+      "answer": 0,
+      "explanation": "Route authoritative answers to systems of record through tools."
+    },
+    {
+      "question": "Who must help define what a 'correct' answer is in a specialized domain?",
+      "options": [
+        "Domain experts",
+        "The model vendor",
+        "Only engineers",
+        "End users only"
+      ],
+      "answer": 0,
+      "explanation": "Experts build and review the evaluation set; engineers can't define correctness alone."
+    }
+  ]
+}

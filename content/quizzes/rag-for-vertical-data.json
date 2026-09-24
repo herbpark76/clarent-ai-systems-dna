@@ -1,0 +1,49 @@
+{
+  "slug": "rag-for-vertical-data",
+  "questions": [
+    {
+      "question": "Why can a similarity search return an outdated document?",
+      "options": [
+        "Old documents are always ranked first",
+        "Embeddings expire",
+        "Vector databases sort by date",
+        "It has no idea which document is current and may prefer older wording that matches better"
+      ],
+      "answer": 3,
+      "explanation": "Store effective dates and status as metadata and filter to current material by default."
+    },
+    {
+      "question": "What is the best fix for missing exact codes and abbreviations?",
+      "options": [
+        "Longer chunks",
+        "Removing metadata",
+        "A higher temperature",
+        "Hybrid search plus a domain glossary for synonyms"
+      ],
+      "answer": 3,
+      "explanation": "Keyword search catches exact identifiers; a glossary handles abbreviations and synonyms."
+    },
+    {
+      "question": "How should documents with tables and numbered clauses be chunked?",
+      "options": [
+        "Along the document's structure, keeping exceptions with their rules and table rows with headers",
+        "Randomly",
+        "One chunk per document",
+        "Fixed 500-character chunks"
+      ],
+      "answer": 0,
+      "explanation": "Structure-aware chunking prevents fragments that say the opposite of the full text."
+    },
+    {
+      "question": "'What rate applies to this invoice?' should be answered by…",
+      "options": [
+        "The model's own knowledge",
+        "Asking the user",
+        "Retrieving the most similar memo",
+        "Calling the calculation system through a tool"
+      ],
+      "answer": 3,
+      "explanation": "Calculations and live data come from systems of record; documents explain the result."
+    }
+  ]
+}
