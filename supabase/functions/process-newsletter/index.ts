@@ -9,7 +9,7 @@ const corsHeaders = {
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
 // Change this to switch the Claude model used for newsletter processing.
-const CLAUDE_MODEL = "claude-sonnet-4-20250514";
+const CLAUDE_MODEL = "claude-sonnet-5";
 
 const ADMIN_EMAIL = "hpark76@gmail.com";
 
