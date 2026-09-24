@@ -5,7 +5,7 @@ import {
   ArrowLeft, Loader2, Trash2, Send, RefreshCw,
   Newspaper, AlertCircle, CheckCircle2, ExternalLink,
   Layers, Tag, Briefcase, Building2, ChevronDown, Link2,
-  GitMerge, XCircle, Copy, Cpu,
+  GitMerge, XCircle, Copy, Cpu, Trophy,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -36,7 +36,8 @@ interface SignalEntry {
   role_tags: string[] | null;
   model_name: string | null;
   vendor: string | null;
-  benchmark_score: string | null;
+  benchmark_score: number | null;
+  benchmark_name: string | null;
   price_input: string | null;
   price_output: string | null;
   source_name: string | null;
@@ -236,7 +237,7 @@ function EntryCard({
       why_it_matters: draft.why_it_matters, how_its_built: draft.how_its_built,
       business_angle: draft.business_angle, type: draft.type, system_layer: draft.system_layer,
       tags: draft.tags, role_tags: draft.role_tags, model_name: draft.model_name,
-      vendor: draft.vendor, benchmark_score: draft.benchmark_score,
+      vendor: draft.vendor, benchmark_score: draft.benchmark_score, benchmark_name: draft.benchmark_name,
       price_input: draft.price_input, price_output: draft.price_output, source_url: draft.source_url,
     });
     setEditing(false);
@@ -355,7 +356,8 @@ function EntryCard({
               <div className="grid grid-cols-2 gap-2">
                 <input value={draft.model_name || ''} onChange={(e) => setDraft({ ...draft, model_name: e.target.value })} placeholder="Model name" className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs" />
                 <input value={draft.vendor || ''} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="Vendor" className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs" />
-                <input value={draft.benchmark_score || ''} onChange={(e) => setDraft({ ...draft, benchmark_score: e.target.value })} placeholder="Benchmark score" className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs" />
+                <input type="number" step="any" value={draft.benchmark_score ?? ''} onChange={(e) => setDraft({ ...draft, benchmark_score: e.target.value === '' ? null : parseFloat(e.target.value) })} placeholder="Score (number)" className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs" />
+                <input value={draft.benchmark_name || ''} onChange={(e) => setDraft({ ...draft, benchmark_name: e.target.value || null })} placeholder="Benchmark name" className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs" />
                 <input value={draft.price_input || ''} onChange={(e) => setDraft({ ...draft, price_input: e.target.value })} placeholder="Price (input)" className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs" />
                 <input value={draft.price_output || ''} onChange={(e) => setDraft({ ...draft, price_output: e.target.value })} placeholder="Price (output)" className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs" />
               </div>
@@ -416,7 +418,11 @@ function EntryCard({
                   <div className="flex flex-wrap gap-2 text-[10px]">
                     <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300">{entry.model_name}</span>
                     {entry.vendor && <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">{entry.vendor}</span>}
-                    {entry.benchmark_score && <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">Score: {entry.benchmark_score}</span>}
+                    {entry.benchmark_score != null && (
+                      <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">
+                        {entry.benchmark_name ? `${entry.benchmark_name}: ` : 'Score: '}{entry.benchmark_score}
+                      </span>
+                    )}
                     {entry.price_input && <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">In: {entry.price_input}</span>}
                     {entry.price_output && <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">Out: {entry.price_output}</span>}
                   </div>
@@ -502,7 +508,11 @@ function ModelTrackerCard({ entry }: { entry: SignalEntry }) {
       <div className="px-4 py-3">
         <p className="text-xs text-white/50 leading-relaxed mb-2">{entry.summary}</p>
         <div className="flex flex-wrap gap-2 text-[10px]">
-          {entry.benchmark_score && <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">Score: {entry.benchmark_score}</span>}
+          {entry.benchmark_score != null && (
+            <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-semibold">
+              {entry.benchmark_name ? `${entry.benchmark_name}: ` : 'Score: '}{entry.benchmark_score}
+            </span>
+          )}
           {entry.price_input && <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">In: {entry.price_input}</span>}
           {entry.price_output && <span className="px-2 py-0.5 rounded bg-white/[0.05] text-white/50">Out: {entry.price_output}</span>}
           <span className={`px-2 py-0.5 rounded ${entry.status === 'published' ? 'bg-green-500/10 text-green-300' : 'bg-white/[0.05] text-white/40'}`}>
@@ -521,6 +531,63 @@ function ModelTrackerCard({ entry }: { entry: SignalEntry }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Model Tracker Groups (rank by benchmark_name) ─────
+function ModelTrackerGroups({ entries }: { entries: SignalEntry[] }) {
+  const withScores = entries.filter((e) => e.benchmark_score != null && e.benchmark_name);
+  const withoutScores = entries.filter((e) => e.benchmark_score == null || !e.benchmark_name);
+
+  // Group scored entries by benchmark_name, sort each group by score descending
+  const groups = new Map<string, SignalEntry[]>();
+  for (const e of withScores) {
+    const name = e.benchmark_name!;
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name)!.push(e);
+  }
+  for (const [, list] of groups) {
+    list.sort((a, b) => (b.benchmark_score ?? 0) - (a.benchmark_score ?? 0));
+  }
+  const sortedGroups = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  return (
+    <div className="space-y-6">
+      {sortedGroups.map(([benchName, models]) => (
+        <div key={benchName}>
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <h4 className="text-xs font-bold text-white/70">{benchName}</h4>
+            <span className="text-[10px] text-white/30">({models.length} models)</span>
+          </div>
+          <div className="space-y-3">
+            {models.map((entry, idx) => (
+              <div key={entry.id} className="relative">
+                {idx === 0 && (
+                  <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-amber-400/60" />
+                )}
+                <ModelTrackerCard key={entry.id} entry={entry} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {withoutScores.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Cpu className="w-3.5 h-3.5 text-white/30" />
+            <h4 className="text-xs font-bold text-white/40">No benchmark score</h4>
+            <span className="text-[10px] text-white/30">({withoutScores.length} models)</span>
+          </div>
+          <div className="space-y-3">
+            {withoutScores.map((entry) => (
+              <ModelTrackerCard key={entry.id} entry={entry} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -693,7 +760,7 @@ export default function AdminSignalDesk() {
 
     // Update target with merged sources and any new details if the dup has them
     const patch: Partial<SignalEntry> = { sources: mergedSources };
-    if (dup.benchmark_score && !target.benchmark_score) patch.benchmark_score = dup.benchmark_score;
+    if (dup.benchmark_score != null && target.benchmark_score == null) { patch.benchmark_score = dup.benchmark_score; patch.benchmark_name = dup.benchmark_name; }
     if (dup.price_input && !target.price_input) patch.price_input = dup.price_input;
     if (dup.price_output && !target.price_output) patch.price_output = dup.price_output;
 
@@ -935,11 +1002,7 @@ export default function AdminSignalDesk() {
                 <p className="text-sm text-white/30">No model releases yet. Process a newsletter that covers model releases.</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {modelEntries.map((entry) => (
-                  <ModelTrackerCard key={entry.id} entry={entry} />
-                ))}
-              </div>
+              <ModelTrackerGroups entries={modelEntries} />
             )}
           </>
         )}

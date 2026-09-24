@@ -42,7 +42,8 @@ interface ProcessedEntry {
   role_tags?: string[];
   model_name?: string;
   vendor?: string;
-  benchmark_score?: string;
+  benchmark_score?: number | null;
+  benchmark_name?: string | null;
   price_input?: string;
   price_output?: string;
   source_url?: string;
@@ -72,11 +73,17 @@ INSTRUCTIONS:
    - tags: array of 2-5 short lowercase tags
    - role_tags: array of relevant roles from: finance, legal, ops, marketing, IT (can be empty)
    - For tutorials ONLY: steps: array of { text, prompt? } objects where prompt is an optional example prompt string
-   - For model_release type only: model_name, vendor, benchmark_score, price_input, price_output (all nullable strings)
+   - For model_release type only: model_name, vendor, benchmark_score (a NUMBER or null, never text), benchmark_name (the name of the benchmark, e.g. "AA Intelligence Index" — null if no benchmark), price_input, price_output (all nullable)
    - source_url: if discoverable in the text, otherwise null
 
 MODEL RELEASES — ONE ENTRY PER MODEL:
-If a story covers several models (e.g. "Opus 5.5 and GPT-6 Sol/Luna"), split it into SEPARATE entries, one per model. Each entry gets its own model_name, vendor, benchmark_score, price_input, and price_output. Put the shared context (e.g. "announced together at X event") in each entry's summary so each stands alone. Do NOT combine multiple models into one entry.
+If a story covers several models (e.g. "Opus 5.5 and GPT-6 Sol/Luna"), split it into SEPARATE entries, one per model. Each entry gets its own model_name, vendor, benchmark_score, benchmark_name, price_input, and price_output. Put the shared context (e.g. "announced together at X event") in each entry's summary so each stands alone. Do NOT combine multiple models into one entry.
+
+BENCHMARK SCORES:
+- benchmark_score MUST be a number (e.g. 46, 92.5) or null. NEVER put text in this field.
+- If the source says "scored 46 on the AA Intelligence Index", set benchmark_score to 46 and benchmark_name to "AA Intelligence Index".
+- If the source only says "beats model X" or "on par with model Y" with no number, set benchmark_score to null and put that claim in the summary.
+- benchmark_name identifies which benchmark the score is from so models are only compared within the same benchmark.
 
 COMMUNITY AI WORKFLOW & ROUNDTABLE STORIES:
 Always capture "Community AI Workflow" and "Roundtable" stories as use_case entries. Structure them as Problem → Tool → Steps → Result:
@@ -297,7 +304,8 @@ function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEn
     role_tags: Array.isArray(raw.role_tags) ? raw.role_tags.slice(0, 10) : [],
     model_name: raw.model_name || null,
     vendor: raw.vendor || null,
-    benchmark_score: raw.benchmark_score || null,
+    benchmark_score: typeof raw.benchmark_score === "number" ? raw.benchmark_score : null,
+    benchmark_name: raw.benchmark_name ? String(raw.benchmark_name) : null,
     price_input: raw.price_input || null,
     price_output: raw.price_output || null,
     source_url: raw.source_url || null,
@@ -469,7 +477,8 @@ Deno.serve(async (req: Request) => {
                 role_tags: { type: "array", items: { type: "string" } },
                 model_name: { type: "string" },
                 vendor: { type: "string" },
-                benchmark_score: { type: "string" },
+                benchmark_score: { type: "number", description: "A numeric benchmark score, or null if no score is available. NEVER put text here." },
+                benchmark_name: { type: "string", description: "The name of the benchmark this score is from (e.g. \"AA Intelligence Index\", \"MMLU\", \"HumanEval\"). Null if no benchmark." },
                 price_input: { type: "string" },
                 price_output: { type: "string" },
                 source_url: { type: "string" },
@@ -576,6 +585,7 @@ Deno.serve(async (req: Request) => {
         model_name: e.model_name,
         vendor: e.vendor,
         benchmark_score: e.benchmark_score,
+        benchmark_name: e.benchmark_name,
         price_input: e.price_input,
         price_output: e.price_output,
         source_url: finalSourceUrl || e.source_url || null,
