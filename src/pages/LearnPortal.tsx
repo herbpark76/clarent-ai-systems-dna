@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Loader2, LogOut, CheckCircle2, Circle, PlayCircle,
   BookOpen, Calendar, Users, ChevronRight, ArrowLeft,
-  GraduationCap, TrendingUp,
+  GraduationCap, TrendingUp, Eye, ListChecks,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -125,7 +125,7 @@ function getInitials(name: string): string {
 
 // ── Learner Dashboard ──────────────────────────────────
 function LearnerDashboard({
-  track, weeks, tasks, progress, onToggleTask, fullName,
+  track, weeks, tasks, progress, onToggleTask, fullName, readOnly = false,
 }: {
   track: Track;
   weeks: Week[];
@@ -133,14 +133,17 @@ function LearnerDashboard({
   progress: Map<string, ProgressRow>;
   onToggleTask: (taskId: string, currentStatus: TaskStatus) => void;
   fullName: string;
+  readOnly?: boolean;
 }) {
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const totalTasks = tasks.length;
   const doneCount = Array.from(progress.values()).filter((p) => p.status === 'done').length;
   const pct = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0;
+  const noop = () => {};
+  const handleToggle = readOnly ? noop : onToggleTask;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-24">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24">
       {/* Track header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
@@ -229,8 +232,11 @@ function LearnerDashboard({
                       return (
                         <button
                           key={task.id}
-                          onClick={() => onToggleTask(task.id, status)}
-                          className="w-full flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-white/[0.04] transition-all text-left group"
+                          onClick={() => handleToggle(task.id, status)}
+                          disabled={readOnly}
+                          className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all text-left group ${
+                            readOnly ? 'cursor-default' : 'hover:bg-white/[0.04]'
+                          }`}
                         >
                           <span className="flex-shrink-0 mt-0.5">
                             {status === 'done' ? (
@@ -283,10 +289,11 @@ function AdminDashboard({
     const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
 
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-24">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24">
+        {/* Back button — clearly visible with a pill style */}
         <button
           onClick={() => onSelectLearner('')}
-          className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 mb-6 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/10 text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.08] mb-6 transition-all"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to all learners
         </button>
@@ -337,7 +344,7 @@ function AdminDashboard({
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-24">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24">
       <div className="flex items-center gap-3 mb-2">
         <Users className="w-4 h-4 text-cyan-400" />
         <h1 className="text-xl font-bold text-white">Learner Progress</h1>
@@ -408,6 +415,7 @@ export default function LearnPortal() {
   const [learners, setLearners] = useState<LearnerInfo[]>([]);
   const [selectedLearner, setSelectedLearner] = useState<string | null>(null);
   const [learnerProgress, setLearnerProgress] = useState<ProgressRow[]>([]);
+  const [adminView, setAdminView] = useState<'learners' | 'preview'>('learners');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -598,7 +606,7 @@ export default function LearnPortal() {
     return (
       <div className="min-h-screen bg-[#080c14] text-white">
         <NavBar />
-        <div className="pt-20 flex items-center justify-center">
+        <div className="pt-28 flex items-center justify-center">
           <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
         </div>
       </div>
@@ -633,19 +641,66 @@ export default function LearnPortal() {
       </div>
 
       {loading || !track ? (
-        <div className="pt-20 flex items-center justify-center">
+        <div className="pt-28 flex items-center justify-center">
           <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
         </div>
       ) : isAdmin ? (
-        <AdminDashboard
-          learners={learners}
-          weeks={weeks}
-          tasks={tasks}
-          onSelectLearner={handleSelectLearner}
-          selectedLearner={selectedLearner}
-          learnerProgress={learnerProgress}
-          track={track}
-        />
+        <>
+          {/* Admin view toggle */}
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+            <div className="inline-flex items-center gap-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08] p-0.5">
+              <button
+                onClick={() => { setAdminView('learners'); setSelectedLearner(null); }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  adminView === 'learners' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
+                }`}
+              >
+                <ListChecks className="w-3.5 h-3.5" /> Learner Progress
+              </button>
+              <button
+                onClick={() => setAdminView('preview')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  adminView === 'preview' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" /> Track Preview
+              </button>
+            </div>
+          </div>
+
+          {/* Admin: learner list or learner detail */}
+          {adminView === 'learners' && (
+            <AdminDashboard
+              learners={learners}
+              weeks={weeks}
+              tasks={tasks}
+              onSelectLearner={handleSelectLearner}
+              selectedLearner={selectedLearner}
+              learnerProgress={learnerProgress}
+              track={track}
+            />
+          )}
+
+          {/* Admin: read-only track preview */}
+          {adminView === 'preview' && (
+            <>
+              <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                  <Eye className="w-3 h-3" /> Read-only preview — what learners see
+                </span>
+              </div>
+              <LearnerDashboard
+                track={track}
+                weeks={weeks}
+                tasks={tasks}
+                progress={new Map()}
+                onToggleTask={() => {}}
+                fullName={fullName}
+                readOnly
+              />
+            </>
+          )}
+        </>
       ) : (
         <LearnerDashboard
           track={track}
