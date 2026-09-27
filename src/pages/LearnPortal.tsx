@@ -1,0 +1,675 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  Loader2, LogOut, CheckCircle2, Circle, PlayCircle,
+  BookOpen, Calendar, Users, ChevronRight, ArrowLeft,
+  GraduationCap, TrendingUp,
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import NavBar from '../components/NavBar';
+
+// ── Types ──────────────────────────────────────────────
+type TaskStatus = 'not_started' | 'in_progress' | 'done';
+
+interface Track {
+  id: string;
+  title: string;
+  description: string | null;
+}
+
+interface Week {
+  id: string;
+  track_id: string;
+  week_number: number;
+  title: string;
+  goal: string | null;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+interface Task {
+  id: string;
+  week_id: string;
+  title: string;
+  description: string | null;
+  sort_order: number;
+}
+
+interface ProgressRow {
+  id: string;
+  learner_id: string;
+  task_id: string;
+  status: TaskStatus;
+  completed_at: string | null;
+}
+
+interface LearnerInfo {
+  id: string;
+  email: string;
+  progressCount: number;
+  doneCount: number;
+  currentWeek: number | null;
+}
+
+// ── Auth Gate ──────────────────────────────────────────
+function SignInGate({ onSignedIn }: { onSignedIn: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    } else {
+      onSignedIn();
+    }
+  };
+
+  return (
+    <div className="pt-20 min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center mx-auto mb-4">
+            <GraduationCap className="w-5 h-5 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-white mb-1">Learner Portal</h1>
+          <p className="text-sm text-white/40">Sign in to access your training track</p>
+        </div>
+        <form onSubmit={handleSignIn} className="space-y-3">
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email"
+            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+          <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password"
+            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-sm hover:from-blue-400 hover:to-cyan-400 disabled:opacity-60 transition-all">
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+        <p className="text-[10px] text-white/25 text-center mt-4">
+          Don't have an account? Contact your administrator for an invite.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Progress helpers ───────────────────────────────────
+function isCurrentWeek(week: Week): boolean {
+  if (!week.start_date || !week.end_date) return false;
+  const now = new Date();
+  const start = new Date(week.start_date);
+  const end = new Date(week.end_date);
+  end.setHours(23, 59, 59);
+  return now >= start && now <= end;
+}
+
+function formatDateRange(start: string | null, end: string | null): string {
+  if (!start && !end) return '';
+  const fmt = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (start && end) return `${fmt(start)} – ${fmt(end)}`;
+  return fmt(start || end!);
+}
+
+// ── Learner Dashboard ──────────────────────────────────
+function LearnerDashboard({
+  track, weeks, tasks, progress, onToggleTask, userEmail,
+}: {
+  track: Track;
+  weeks: Week[];
+  tasks: Task[];
+  progress: Map<string, ProgressRow>;
+  onToggleTask: (taskId: string, currentStatus: TaskStatus) => void;
+  userEmail: string;
+}) {
+  const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
+  const totalTasks = tasks.length;
+  const doneCount = Array.from(progress.values()).filter((p) => p.status === 'done').length;
+  const pct = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0;
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-24">
+      {/* Track header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <BookOpen className="w-4 h-4 text-cyan-400" />
+          <span className="text-xs text-white/40">{userEmail}</span>
+        </div>
+        <h1 className="text-2xl font-bold text-white mb-2">{track.title}</h1>
+        {track.description && <p className="text-sm text-white/45 leading-relaxed max-w-2xl">{track.description}</p>}
+      </div>
+
+      {/* Overall progress bar */}
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-cyan-400" />
+            <span className="text-sm font-semibold text-white">Overall Progress</span>
+          </div>
+          <span className="text-lg font-bold text-white">{pct}%</span>
+        </div>
+        <div className="h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex items-center gap-4 mt-3 text-[10px] text-white/35">
+          <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-400" /> {doneCount} done</span>
+          <span className="flex items-center gap-1"><PlayCircle className="w-3 h-3 text-amber-400" /> {Array.from(progress.values()).filter((p) => p.status === 'in_progress').length} in progress</span>
+          <span className="flex items-center gap-1"><Circle className="w-3 h-3 text-white/30" /> {totalTasks - doneCount} remaining</span>
+        </div>
+      </div>
+
+      {/* Week cards */}
+      <div className="space-y-4">
+        {sortedWeeks.map((week) => {
+          const weekTasks = tasks.filter((t) => t.week_id === week.id).sort((a, b) => a.sort_order - b.sort_order);
+          const weekDone = weekTasks.filter((t) => progress.get(t.id)?.status === 'done').length;
+          const weekPct = weekTasks.length > 0 ? Math.round((weekDone / weekTasks.length) * 100) : 0;
+          const current = isCurrentWeek(week);
+
+          return (
+            <div
+              key={week.id}
+              className={`rounded-xl border overflow-hidden transition-all ${
+                current ? 'border-blue-500/40 bg-blue-500/[0.03] shadow-lg shadow-blue-500/5' : 'border-white/[0.08] bg-white/[0.02]'
+              }`}
+            >
+              {/* Week header */}
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.05]">
+                <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                  current ? 'bg-blue-500/20 text-blue-300' : 'bg-white/[0.05] text-white/40'
+                }`}>
+                  {week.week_number}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-bold text-white">{week.title}</h3>
+                  {week.goal && <p className="text-xs text-white/40 mt-0.5">{week.goal}</p>}
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  {(week.start_date || week.end_date) && (
+                    <span className="hidden sm:flex items-center gap-1 text-[10px] text-white/30">
+                      <Calendar className="w-2.5 h-2.5" />
+                      {formatDateRange(week.start_date, week.end_date)}
+                    </span>
+                  )}
+                  {current && (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      Current
+                    </span>
+                  )}
+                  <span className={`text-xs font-semibold ${weekPct === 100 ? 'text-green-400' : 'text-white/40'}`}>
+                    {weekDone}/{weekTasks.length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Task checklist */}
+              <div className="px-5 py-3">
+                {weekTasks.length === 0 ? (
+                  <p className="text-xs text-white/30 py-2">No tasks for this week yet.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {weekTasks.map((task) => {
+                      const p = progress.get(task.id);
+                      const status = p?.status || 'not_started';
+                      return (
+                        <button
+                          key={task.id}
+                          onClick={() => onToggleTask(task.id, status)}
+                          className="w-full flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-white/[0.04] transition-all text-left group"
+                        >
+                          <span className="flex-shrink-0 mt-0.5">
+                            {status === 'done' ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-400 group-hover:scale-110 transition-transform" />
+                            ) : status === 'in_progress' ? (
+                              <PlayCircle className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                            ) : (
+                              <Circle className="w-4 h-4 text-white/25 group-hover:text-white/40 transition-colors" />
+                            )}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm leading-snug ${
+                              status === 'done' ? 'text-white/40 line-through' : 'text-white/80'
+                            }`}>{task.title}</p>
+                            {task.description && (
+                              <p className="text-xs text-white/35 mt-0.5 leading-relaxed">{task.description}</p>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Admin Dashboard ────────────────────────────────────
+function AdminDashboard({
+  learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track,
+}: {
+  learners: LearnerInfo[];
+  weeks: Week[];
+  tasks: Task[];
+  onSelectLearner: (email: string) => void;
+  selectedLearner: string | null;
+  learnerProgress: ProgressRow[];
+  track: Track;
+}) {
+  const sortedLearners = [...learners].sort((a, b) => b.doneCount - a.doneCount);
+  const selectedLearnerInfo = learners.find((l) => l.email === selectedLearner);
+
+  if (selectedLearner && selectedLearnerInfo) {
+    const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
+    const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
+
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-24">
+        <button
+          onClick={() => onSelectLearner('')}
+          className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to all learners
+        </button>
+
+        <div className="flex items-center gap-3 mb-2">
+          <Users className="w-4 h-4 text-cyan-400" />
+          <h1 className="text-xl font-bold text-white">{selectedLearnerInfo.email}</h1>
+        </div>
+        <p className="text-sm text-white/40 mb-6">
+          {selectedLearnerInfo.doneCount} of {tasks.length} tasks complete ({Math.round((selectedLearnerInfo.doneCount / Math.max(tasks.length, 1)) * 100)}%)
+        </p>
+
+        <div className="space-y-4">
+          {sortedWeeks.map((week) => {
+            const weekTasks = tasks.filter((t) => t.week_id === week.id).sort((a, b) => a.sort_order - b.sort_order);
+            const weekDone = weekTasks.filter((t) => progressMap.get(t.id)?.status === 'done').length;
+            return (
+              <div key={week.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
+                <div className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.05]">
+                  <div className="w-7 h-7 rounded-lg bg-white/[0.05] flex items-center justify-center text-[10px] font-bold text-white/40">
+                    {week.week_number}
+                  </div>
+                  <h3 className="text-sm font-bold text-white flex-1">{week.title}</h3>
+                  <span className="text-xs font-semibold text-white/40">{weekDone}/{weekTasks.length}</span>
+                </div>
+                <div className="px-5 py-2">
+                  {weekTasks.map((task) => {
+                    const p = progressMap.get(task.id);
+                    const status = p?.status || 'not_started';
+                    return (
+                      <div key={task.id} className="flex items-center gap-3 py-2">
+                        {status === 'done' ? <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                         : status === 'in_progress' ? <PlayCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                         : <Circle className="w-4 h-4 text-white/20 flex-shrink-0" />}
+                        <span className={`text-sm ${status === 'done' ? 'text-white/40 line-through' : 'text-white/70'}`}>
+                          {task.title}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-24">
+      <div className="flex items-center gap-3 mb-2">
+        <Users className="w-4 h-4 text-cyan-400" />
+        <h1 className="text-xl font-bold text-white">Learner Progress</h1>
+      </div>
+      <p className="text-sm text-white/40 mb-6">Track: {track.title}</p>
+
+      {sortedLearners.length === 0 ? (
+        <div className="text-center py-12 rounded-xl border border-white/[0.05] bg-white/[0.01]">
+          <Users className="w-8 h-8 text-white/15 mx-auto mb-3" />
+          <p className="text-sm text-white/30">No learners have progress yet. Invite users from the Supabase dashboard.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {sortedLearners.map((learner) => {
+            const pct = tasks.length > 0 ? Math.round((learner.doneCount / tasks.length) * 100) : 0;
+            return (
+              <button
+                key={learner.id}
+                onClick={() => onSelectLearner(learner.email)}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all text-left"
+              >
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-bold text-cyan-300">
+                    {learner.email.slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">{learner.email}</p>
+                  <p className="text-[10px] text-white/30 mt-0.5">
+                    {learner.doneCount}/{tasks.length} tasks{learner.currentWeek ? ` · Week ${learner.currentWeek}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="w-24 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-bold text-white/60 w-8 text-right">{pct}%</span>
+                  <ChevronRight className="w-4 h-4 text-white/25" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────
+export default function LearnPortal() {
+  const [authed, setAuthed] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [userId, setUserId] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Data
+  const [track, setTrack] = useState<Track | null>(null);
+  const [weeks, setWeeks] = useState<Week[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [progressMap, setProgressMap] = useState<Map<string, ProgressRow>>(new Map());
+
+  // Admin data
+  const [learners, setLearners] = useState<LearnerInfo[]>([]);
+  const [selectedLearner, setSelectedLearner] = useState<string | null>(null);
+  const [learnerProgress, setLearnerProgress] = useState<ProgressRow[]>([]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthed(!!data.session);
+      if (data.session) {
+        setUserEmail(data.session.user.email || '');
+        setUserId(data.session.user.id);
+        const role = data.session.user.app_metadata?.role;
+        setIsAdmin(role === 'admin');
+      }
+      setAuthChecked(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthed(!!session);
+      if (session) {
+        setUserEmail(session.user.email || '');
+        setUserId(session.user.id);
+        const role = session.user.app_metadata?.role;
+        setIsAdmin(role === 'admin');
+      } else {
+        setUserEmail('');
+        setUserId('');
+        setIsAdmin(false);
+      }
+      setAuthChecked(true);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const loadCurriculum = useCallback(async () => {
+    const { data: tracks } = await supabase.from('lp_tracks').select('*').order('created_at').limit(1);
+    if (tracks && tracks.length > 0) {
+      setTrack(tracks[0] as Track);
+      const trackId = tracks[0].id;
+      const { data: w } = await supabase.from('lp_weeks').select('*').eq('track_id', trackId).order('week_number');
+      setWeeks((w || []) as Week[]);
+      const weekIds = (w || []).map((x) => x.id);
+      if (weekIds.length > 0) {
+        const { data: t } = await supabase.from('lp_tasks').select('*').in('week_id', weekIds).order('sort_order');
+        setTasks((t || []) as Task[]);
+      }
+    }
+  }, []);
+
+  const loadLearnerProgress = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase.from('lp_progress').select('*').eq('learner_id', userId);
+    const rows = (data || []) as ProgressRow[];
+    setProgressMap(new Map(rows.map((r) => [r.task_id, r])));
+  }, [userId]);
+
+  const loadAdminLearners = useCallback(async () => {
+    if (!track) return;
+    // Fetch all progress rows (admin can read all via RLS)
+    const { data: allProgress } = await supabase.from('lp_progress').select('*');
+    const rows = (allProgress || []) as ProgressRow[];
+
+    // Group by learner_id
+    const byLearner = new Map<string, ProgressRow[]>();
+    for (const r of rows) {
+      if (!byLearner.has(r.learner_id)) byLearner.set(r.learner_id, []);
+      byLearner.get(r.learner_id)!.push(r);
+    }
+
+    // We need learner emails — fetch from auth via the admin's session
+    // Since we can't query auth.users directly, we'll use the progress data we have
+    // and get emails from the JWT of each user is not possible client-side.
+    // Instead, we'll show learner_id (truncated) and let admin click to see detail.
+    // But for a better UX, we can fetch user emails via an edge function later.
+    // For now, we'll show a truncated ID as the identifier.
+    const taskIds = tasks.map((t) => t.id);
+    const learnerInfos: LearnerInfo[] = [];
+    for (const [lId, pRows] of byLearner) {
+      const doneCount = pRows.filter((p) => p.status === 'done').length;
+      const progressCount = pRows.length;
+      // Find current week: the first week that has at least one not-done task
+      const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
+      let currentWeek: number | null = null;
+      for (const w of sortedWeeks) {
+        const wTasks = tasks.filter((t) => t.week_id === w.id);
+        const allDone = wTasks.every((t) => pRows.find((p) => p.task_id === t.id && p.status === 'done'));
+        if (!allDone && wTasks.length > 0) {
+          currentWeek = w.week_number;
+          break;
+        }
+      }
+      if (currentWeek === null && doneCount > 0 && doneCount < taskIds.length) {
+        // Find the first week with no progress at all
+        for (const w of sortedWeeks) {
+          const wTasks = tasks.filter((t) => t.week_id === w.id);
+          const hasProgress = wTasks.some((t) => pRows.find((p) => p.task_id === t.id));
+          if (!hasProgress) {
+            currentWeek = w.week_number;
+            break;
+          }
+        }
+      }
+      learnerInfos.push({
+        id: lId,
+        email: lId.slice(0, 8) + '…',
+        progressCount,
+        doneCount,
+        currentWeek,
+      });
+    }
+    setLearners(learnerInfos);
+  }, [track, tasks, weeks]);
+
+  const loadSelectedLearnerProgress = useCallback(async (learnerId: string) => {
+    const { data } = await supabase.from('lp_progress').select('*').eq('learner_id', learnerId);
+    setLearnerProgress((data || []) as ProgressRow[]);
+  }, []);
+
+  useEffect(() => {
+    if (authed) {
+      setLoading(true);
+      loadCurriculum().then(() => {
+        if (isAdmin) {
+          loadAdminLearners();
+        } else {
+          loadLearnerProgress();
+        }
+        setLoading(false);
+      });
+    }
+  }, [authed, isAdmin, loadCurriculum, loadLearnerProgress, loadAdminLearners]);
+
+  // Reload admin learner list when tasks are loaded
+  useEffect(() => {
+    if (authed && isAdmin && tasks.length > 0) {
+      loadAdminLearners();
+    }
+  }, [tasks, authed, isAdmin, loadAdminLearners]);
+
+  const handleToggleTask = async (taskId: string, currentStatus: TaskStatus) => {
+    const newStatus: TaskStatus = currentStatus === 'done' ? 'not_started' : currentStatus === 'not_started' ? 'in_progress' : 'done';
+    const completedAt = newStatus === 'done' ? new Date().toISOString() : null;
+
+    // Optimistic update
+    setProgressMap((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(taskId);
+      if (existing) {
+        next.set(taskId, { ...existing, status: newStatus, completed_at: completedAt });
+      } else {
+        next.set(taskId, {
+          id: 'temp',
+          learner_id: userId,
+          task_id: taskId,
+          status: newStatus,
+          completed_at: completedAt,
+        });
+      }
+      return next;
+    });
+
+    // Upsert to database
+    const existing = progressMap.get(taskId);
+    if (existing && existing.id !== 'temp') {
+      await supabase.from('lp_progress').update({ status: newStatus, completed_at: completedAt }).eq('id', existing.id);
+    } else {
+      const { data } = await supabase.from('lp_progress').insert({
+        learner_id: userId,
+        task_id: taskId,
+        status: newStatus,
+        completed_at: completedAt,
+      }).select('*');
+      if (data && data.length > 0) {
+        setProgressMap((prev) => {
+          const next = new Map(prev);
+          next.set(taskId, data[0] as ProgressRow);
+          return next;
+        });
+      }
+    }
+  };
+
+  const handleSelectLearner = (email: string) => {
+    if (email === '') {
+      setSelectedLearner(null);
+      setLearnerProgress([]);
+      return;
+    }
+    const learner = learners.find((l) => l.email === email);
+    if (learner) {
+      setSelectedLearner(email);
+      loadSelectedLearnerProgress(learner.id);
+    }
+  };
+
+  const handleSignOut = () => {
+    supabase.auth.signOut();
+    setAuthed(false);
+    setProgressMap(new Map());
+    setLearners([]);
+    setSelectedLearner(null);
+  };
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-[#080c14] text-white">
+        <NavBar />
+        <div className="pt-20 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!authed) {
+    return (
+      <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
+        <NavBar />
+        <SignInGate onSignedIn={() => setAuthed(true)} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
+      <NavBar />
+
+      {/* Top bar with sign out */}
+      <div className="fixed top-14 right-0 z-40 px-4 sm:px-6 lg:px-8 py-2">
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300">
+              Admin
+            </span>
+          )}
+          <button onClick={handleSignOut} className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors">
+            <LogOut className="w-3 h-3" /> Sign out
+          </button>
+        </div>
+      </div>
+
+      {loading || !track ? (
+        <div className="pt-20 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+        </div>
+      ) : isAdmin ? (
+        <AdminDashboard
+          learners={learners}
+          weeks={weeks}
+          tasks={tasks}
+          onSelectLearner={handleSelectLearner}
+          selectedLearner={selectedLearner}
+          learnerProgress={learnerProgress}
+          track={track}
+        />
+      ) : (
+        <LearnerDashboard
+          track={track}
+          weeks={weeks}
+          tasks={tasks}
+          progress={progressMap}
+          onToggleTask={handleToggleTask}
+          userEmail={userEmail}
+        />
+      )}
+
+      {/* Back link */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+        <Link to="/" className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors group">
+          <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+          Back to site
+        </Link>
+      </div>
+    </div>
+  );
+}

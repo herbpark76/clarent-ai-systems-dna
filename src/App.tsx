@@ -10,6 +10,7 @@ import UseCasesPage from './pages/UseCasesPage';
 import ModelsPage from './pages/ModelsPage';
 import RiskPage from './pages/RiskPage';
 import NotFoundPage from './pages/NotFoundPage';
+import LearnPortal from './pages/LearnPortal';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/use-cases" element={<UseCasesPage />} />
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/risk" element={<RiskPage />} />
+        <Route path="/learn" element={<LearnPortal />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
