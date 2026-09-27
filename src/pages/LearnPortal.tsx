@@ -439,106 +439,99 @@ export default function LearnPortal() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const loadCurriculum = useCallback(async () => {
-    const { data: tracks } = await supabase.from('lp_tracks').select('*').order('created_at').limit(1);
-    if (tracks && tracks.length > 0) {
-      setTrack(tracks[0] as Track);
-      const trackId = tracks[0].id;
+  // ── Effect 1: Load curriculum once per session (depends only on authed) ──
+  useEffect(() => {
+    if (!authed) return;
+    let cancelled = false;
+    (async () => {
+      const { data: tracks } = await supabase.from('lp_tracks').select('*').order('created_at').limit(1);
+      if (cancelled || !tracks || tracks.length === 0) return;
+      const t = tracks[0] as Track;
+      const trackId = t.id;
       const { data: w } = await supabase.from('lp_weeks').select('*').eq('track_id', trackId).order('week_number');
-      setWeeks((w || []) as Week[]);
-      const weekIds = (w || []).map((x) => x.id);
+      const weekRows = (w || []) as Week[];
+      const weekIds = weekRows.map((x) => x.id);
+      let taskRows: Task[] = [];
       if (weekIds.length > 0) {
-        const { data: t } = await supabase.from('lp_tasks').select('*').in('week_id', weekIds).order('sort_order');
-        setTasks((t || []) as Task[]);
+        const { data: tk } = await supabase.from('lp_tasks').select('*').in('week_id', weekIds).order('sort_order');
+        taskRows = (tk || []) as Task[];
       }
-    }
-  }, []);
+      if (cancelled) return;
+      setTrack(t);
+      setWeeks(weekRows);
+      setTasks(taskRows);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [authed]);
 
-  const loadLearnerProgress = useCallback(async () => {
-    if (!userId) return;
-    const { data } = await supabase.from('lp_progress').select('*').eq('learner_id', userId);
-    const rows = (data || []) as ProgressRow[];
-    setProgressMap(new Map(rows.map((r) => [r.task_id, r])));
-  }, [userId]);
-
-  const loadAdminLearners = useCallback(async () => {
-    if (!track) return;
-    // Fetch all progress rows (admin can read all via RLS)
-    const { data: allProgress } = await supabase.from('lp_progress').select('*');
-    const rows = (allProgress || []) as ProgressRow[];
-
-    // Fetch all learner profiles (admin can read all via RLS)
-    const { data: profiles } = await supabase.from('lp_profiles').select('id, full_name');
-    const profileMap = new Map<string, string>(
-      (profiles || []).map((p: any) => [p.id, p.full_name || 'Unknown'])
-    );
-
-    // Group progress by learner_id
-    const byLearner = new Map<string, ProgressRow[]>();
-    for (const r of rows) {
-      if (!byLearner.has(r.learner_id)) byLearner.set(r.learner_id, []);
-      byLearner.get(r.learner_id)!.push(r);
-    }
-
-    const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
-    const learnerInfos: LearnerInfo[] = [];
-    for (const [lId, pRows] of byLearner) {
-      const doneCount = pRows.filter((p) => p.status === 'done').length;
-      // Find current week: the first week that has at least one not-done task
-      let currentWeek: number | null = null;
-      for (const w of sortedWeeks) {
-        const wTasks = tasks.filter((t) => t.week_id === w.id);
-        const allDone = wTasks.every((t) => pRows.find((p) => p.task_id === t.id && p.status === 'done'));
-        if (!allDone && wTasks.length > 0) {
-          currentWeek = w.week_number;
-          break;
+  // ── Effect 2: Load progress after curriculum is loaded (depends on track, not callbacks) ──
+  useEffect(() => {
+    if (!track || tasks.length === 0) return;
+    let cancelled = false;
+    if (isAdmin) {
+      (async () => {
+        const { data: allProgress } = await supabase.from('lp_progress').select('*');
+        if (cancelled) return;
+        const rows = (allProgress || []) as ProgressRow[];
+        const { data: profiles } = await supabase.from('lp_profiles').select('id, full_name');
+        if (cancelled) return;
+        const profileMap = new Map<string, string>(
+          (profiles || []).map((p: any) => [p.id, p.full_name || 'Unknown'])
+        );
+        const byLearner = new Map<string, ProgressRow[]>();
+        for (const r of rows) {
+          if (!byLearner.has(r.learner_id)) byLearner.set(r.learner_id, []);
+          byLearner.get(r.learner_id)!.push(r);
         }
-      }
-      if (currentWeek === null && doneCount > 0 && doneCount < tasks.length) {
-        for (const w of sortedWeeks) {
-          const wTasks = tasks.filter((t) => t.week_id === w.id);
-          const hasProgress = wTasks.some((t) => pRows.find((p) => p.task_id === t.id));
-          if (!hasProgress) {
-            currentWeek = w.week_number;
-            break;
+        const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
+        const learnerInfos: LearnerInfo[] = [];
+        for (const [lId, pRows] of byLearner) {
+          const doneCount = pRows.filter((p) => p.status === 'done').length;
+          let currentWeek: number | null = null;
+          for (const w of sortedWeeks) {
+            const wTasks = tasks.filter((t) => t.week_id === w.id);
+            const allDone = wTasks.every((t) => pRows.find((p) => p.task_id === t.id && p.status === 'done'));
+            if (!allDone && wTasks.length > 0) {
+              currentWeek = w.week_number;
+              break;
+            }
           }
+          if (currentWeek === null && doneCount > 0 && doneCount < tasks.length) {
+            for (const w of sortedWeeks) {
+              const wTasks = tasks.filter((t) => t.week_id === w.id);
+              const hasProgress = wTasks.some((t) => pRows.find((p) => p.task_id === t.id));
+              if (!hasProgress) {
+                currentWeek = w.week_number;
+                break;
+              }
+            }
+          }
+          learnerInfos.push({
+            id: lId,
+            fullName: profileMap.get(lId) || 'Unknown learner',
+            doneCount,
+            currentWeek,
+          });
         }
-      }
-      learnerInfos.push({
-        id: lId,
-        fullName: profileMap.get(lId) || 'Unknown learner',
-        doneCount,
-        currentWeek,
-      });
+        if (!cancelled) setLearners(learnerInfos);
+      })();
+    } else {
+      if (!userId) return;
+      (async () => {
+        const { data } = await supabase.from('lp_progress').select('*').eq('learner_id', userId);
+        if (cancelled) return;
+        const rows = (data || []) as ProgressRow[];
+        setProgressMap(new Map(rows.map((r) => [r.task_id, r])));
+      })();
     }
-    setLearners(learnerInfos);
-  }, [track, tasks, weeks]);
+    return () => { cancelled = true; };
+  }, [track, tasks, weeks, isAdmin, userId]);
 
   const loadSelectedLearnerProgress = useCallback(async (learnerId: string) => {
     const { data } = await supabase.from('lp_progress').select('*').eq('learner_id', learnerId);
     setLearnerProgress((data || []) as ProgressRow[]);
   }, []);
-
-  useEffect(() => {
-    if (authed) {
-      setLoading(true);
-      loadCurriculum().then(() => {
-        if (isAdmin) {
-          loadAdminLearners();
-        } else {
-          loadLearnerProgress();
-        }
-        setLoading(false);
-      });
-    }
-  }, [authed, isAdmin, loadCurriculum, loadLearnerProgress, loadAdminLearners]);
-
-  // Reload admin learner list when tasks are loaded
-  useEffect(() => {
-    if (authed && isAdmin && tasks.length > 0) {
-      loadAdminLearners();
-    }
-  }, [tasks, authed, isAdmin, loadAdminLearners]);
 
   const handleToggleTask = async (taskId: string, currentStatus: TaskStatus) => {
     const newStatus: TaskStatus = currentStatus === 'done' ? 'not_started' : currentStatus === 'not_started' ? 'in_progress' : 'done';
@@ -562,7 +555,7 @@ export default function LearnPortal() {
       return next;
     });
 
-    // Upsert to database
+    // Persist to database (no loading spinner — this is a background save)
     const existing = progressMap.get(taskId);
     if (existing && existing.id !== 'temp') {
       await supabase.from('lp_progress').update({ status: newStatus, completed_at: completedAt }).eq('id', existing.id);
