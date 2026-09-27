@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, Component } from 'react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Trash2, Send, RefreshCw,
   Newspaper, AlertCircle, CheckCircle2, ExternalLink,
@@ -603,8 +603,10 @@ function ModelTrackerGroups({ entries }: { entries: SignalEntry[] }) {
 
 // ── Main Page ──────────────────────────────────────────
 export default function AdminSignalDesk() {
+  const navigate = useNavigate();
   const [authed, setAuthed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [entries, setEntries] = useState<SignalEntry[]>([]);
   const [modelEntries, setModelEntries] = useState<SignalEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
@@ -621,10 +623,20 @@ export default function AdminSignalDesk() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setAuthed(!!data.session);
+      if (data.session) {
+        const role = data.session.user.app_metadata?.role;
+        setIsAdmin(role === 'admin');
+      }
       setAuthChecked(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthed(!!session);
+      if (session) {
+        const role = session.user.app_metadata?.role;
+        setIsAdmin(role === 'admin');
+      } else {
+        setIsAdmin(false);
+      }
       setAuthChecked(true);
     });
     return () => sub.subscription.unsubscribe();
@@ -922,6 +934,19 @@ export default function AdminSignalDesk() {
       <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
         <NavBar />
         <AuthGate onSignedIn={() => setAuthed(true)} />
+      </div>
+    );
+  }
+
+  // Non-admins are redirected to /learn
+  if (authChecked && !isAdmin) {
+    navigate('/learn');
+    return (
+      <div className="min-h-screen bg-[#080c14] text-white">
+        <NavBar />
+        <div className="pt-20 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+        </div>
       </div>
     );
   }

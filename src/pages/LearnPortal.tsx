@@ -45,8 +45,7 @@ interface ProgressRow {
 
 interface LearnerInfo {
   id: string;
-  email: string;
-  progressCount: number;
+  fullName: string;
   doneCount: number;
   currentWeek: number | null;
 }
@@ -117,16 +116,23 @@ function formatDateRange(start: string | null, end: string | null): string {
   return fmt(start || end!);
 }
 
+function getInitials(name: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
 // ── Learner Dashboard ──────────────────────────────────
 function LearnerDashboard({
-  track, weeks, tasks, progress, onToggleTask, userEmail,
+  track, weeks, tasks, progress, onToggleTask, fullName,
 }: {
   track: Track;
   weeks: Week[];
   tasks: Task[];
   progress: Map<string, ProgressRow>;
   onToggleTask: (taskId: string, currentStatus: TaskStatus) => void;
-  userEmail: string;
+  fullName: string;
 }) {
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const totalTasks = tasks.length;
@@ -139,7 +145,7 @@ function LearnerDashboard({
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <BookOpen className="w-4 h-4 text-cyan-400" />
-          <span className="text-xs text-white/40">{userEmail}</span>
+          <span className="text-xs text-white/40">Welcome back, {fullName}</span>
         </div>
         <h1 className="text-2xl font-bold text-white mb-2">{track.title}</h1>
         {track.description && <p className="text-sm text-white/45 leading-relaxed max-w-2xl">{track.description}</p>}
@@ -264,13 +270,13 @@ function AdminDashboard({
   learners: LearnerInfo[];
   weeks: Week[];
   tasks: Task[];
-  onSelectLearner: (email: string) => void;
+  onSelectLearner: (learnerId: string) => void;
   selectedLearner: string | null;
   learnerProgress: ProgressRow[];
   track: Track;
 }) {
   const sortedLearners = [...learners].sort((a, b) => b.doneCount - a.doneCount);
-  const selectedLearnerInfo = learners.find((l) => l.email === selectedLearner);
+  const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
 
   if (selectedLearner && selectedLearnerInfo) {
     const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
@@ -287,7 +293,7 @@ function AdminDashboard({
 
         <div className="flex items-center gap-3 mb-2">
           <Users className="w-4 h-4 text-cyan-400" />
-          <h1 className="text-xl font-bold text-white">{selectedLearnerInfo.email}</h1>
+          <h1 className="text-xl font-bold text-white">{selectedLearnerInfo.fullName}</h1>
         </div>
         <p className="text-sm text-white/40 mb-6">
           {selectedLearnerInfo.doneCount} of {tasks.length} tasks complete ({Math.round((selectedLearnerInfo.doneCount / Math.max(tasks.length, 1)) * 100)}%)
@@ -350,16 +356,16 @@ function AdminDashboard({
             return (
               <button
                 key={learner.id}
-                onClick={() => onSelectLearner(learner.email)}
+                onClick={() => onSelectLearner(learner.id)}
                 className="w-full flex items-center gap-4 px-5 py-4 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all text-left"
               >
                 <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-bold text-cyan-300">
-                    {learner.email.slice(0, 2).toUpperCase()}
+                    {getInitials(learner.fullName)}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white">{learner.email}</p>
+                  <p className="text-sm font-semibold text-white">{learner.fullName}</p>
                   <p className="text-[10px] text-white/30 mt-0.5">
                     {learner.doneCount}/{tasks.length} tasks{learner.currentWeek ? ` · Week ${learner.currentWeek}` : ''}
                   </p>
@@ -387,7 +393,7 @@ function AdminDashboard({
 export default function LearnPortal() {
   const [authed, setAuthed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
+  const [fullName, setFullName] = useState('');
   const [userId, setUserId] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -407,23 +413,25 @@ export default function LearnPortal() {
     supabase.auth.getSession().then(({ data }) => {
       setAuthed(!!data.session);
       if (data.session) {
-        setUserEmail(data.session.user.email || '');
         setUserId(data.session.user.id);
         const role = data.session.user.app_metadata?.role;
         setIsAdmin(role === 'admin');
+        const name = data.session.user.user_metadata?.full_name as string | undefined;
+        setFullName(name || data.session.user.email || '');
       }
       setAuthChecked(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthed(!!session);
       if (session) {
-        setUserEmail(session.user.email || '');
         setUserId(session.user.id);
         const role = session.user.app_metadata?.role;
         setIsAdmin(role === 'admin');
+        const name = session.user.user_metadata?.full_name as string | undefined;
+        setFullName(name || session.user.email || '');
       } else {
-        setUserEmail('');
         setUserId('');
+        setFullName('');
         setIsAdmin(false);
       }
       setAuthChecked(true);
@@ -459,26 +467,24 @@ export default function LearnPortal() {
     const { data: allProgress } = await supabase.from('lp_progress').select('*');
     const rows = (allProgress || []) as ProgressRow[];
 
-    // Group by learner_id
+    // Fetch all learner profiles (admin can read all via RLS)
+    const { data: profiles } = await supabase.from('lp_profiles').select('id, full_name');
+    const profileMap = new Map<string, string>(
+      (profiles || []).map((p: any) => [p.id, p.full_name || 'Unknown'])
+    );
+
+    // Group progress by learner_id
     const byLearner = new Map<string, ProgressRow[]>();
     for (const r of rows) {
       if (!byLearner.has(r.learner_id)) byLearner.set(r.learner_id, []);
       byLearner.get(r.learner_id)!.push(r);
     }
 
-    // We need learner emails — fetch from auth via the admin's session
-    // Since we can't query auth.users directly, we'll use the progress data we have
-    // and get emails from the JWT of each user is not possible client-side.
-    // Instead, we'll show learner_id (truncated) and let admin click to see detail.
-    // But for a better UX, we can fetch user emails via an edge function later.
-    // For now, we'll show a truncated ID as the identifier.
-    const taskIds = tasks.map((t) => t.id);
+    const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
     const learnerInfos: LearnerInfo[] = [];
     for (const [lId, pRows] of byLearner) {
       const doneCount = pRows.filter((p) => p.status === 'done').length;
-      const progressCount = pRows.length;
       // Find current week: the first week that has at least one not-done task
-      const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
       let currentWeek: number | null = null;
       for (const w of sortedWeeks) {
         const wTasks = tasks.filter((t) => t.week_id === w.id);
@@ -488,8 +494,7 @@ export default function LearnPortal() {
           break;
         }
       }
-      if (currentWeek === null && doneCount > 0 && doneCount < taskIds.length) {
-        // Find the first week with no progress at all
+      if (currentWeek === null && doneCount > 0 && doneCount < tasks.length) {
         for (const w of sortedWeeks) {
           const wTasks = tasks.filter((t) => t.week_id === w.id);
           const hasProgress = wTasks.some((t) => pRows.find((p) => p.task_id === t.id));
@@ -501,8 +506,7 @@ export default function LearnPortal() {
       }
       learnerInfos.push({
         id: lId,
-        email: lId.slice(0, 8) + '…',
-        progressCount,
+        fullName: profileMap.get(lId) || 'Unknown learner',
         doneCount,
         currentWeek,
       });
@@ -579,17 +583,14 @@ export default function LearnPortal() {
     }
   };
 
-  const handleSelectLearner = (email: string) => {
-    if (email === '') {
+  const handleSelectLearner = (learnerId: string) => {
+    if (learnerId === '') {
       setSelectedLearner(null);
       setLearnerProgress([]);
       return;
     }
-    const learner = learners.find((l) => l.email === email);
-    if (learner) {
-      setSelectedLearner(email);
-      loadSelectedLearnerProgress(learner.id);
-    }
+    setSelectedLearner(learnerId);
+    loadSelectedLearnerProgress(learnerId);
   };
 
   const handleSignOut = () => {
@@ -659,7 +660,7 @@ export default function LearnPortal() {
           tasks={tasks}
           progress={progressMap}
           onToggleTask={handleToggleTask}
-          userEmail={userEmail}
+          fullName={fullName}
         />
       )}
 

@@ -11,8 +11,6 @@ const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 // Change this to switch the Claude model used for newsletter processing.
 const CLAUDE_MODEL = "claude-sonnet-5";
 
-const ADMIN_EMAIL = "hpark76@gmail.com";
-
 const MIN_EXTRACTED_TEXT = 500;
 
 interface SourceObj {
@@ -363,13 +361,14 @@ Deno.serve(async (req: Request) => {
     // ── Admin auth check (before any fetch) ─────────────
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace("Bearer ", "");
-    let callerEmail: string | null = null;
+    let callerRole: string | null = null;
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
-      callerEmail = payload.email ?? null;
+      // app_metadata.role is embedded in the JWT as a top-level "role" claim
+      callerRole = payload.role ?? payload.app_metadata?.role ?? null;
     } catch { /* malformed JWT — leave null */ }
 
-    if (callerEmail !== ADMIN_EMAIL) {
+    if (callerRole !== "admin") {
       return new Response(
         JSON.stringify({ error: "Unauthorized. Admin access required." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
