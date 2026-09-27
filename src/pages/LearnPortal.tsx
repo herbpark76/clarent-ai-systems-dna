@@ -100,18 +100,23 @@ function SignInGate({ onSignedIn }: { onSignedIn: () => void }) {
 }
 
 // ── Progress helpers ───────────────────────────────────
+function localDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function isCurrentWeek(week: Week): boolean {
   if (!week.start_date || !week.end_date) return false;
   const now = new Date();
-  const start = new Date(week.start_date);
-  const end = new Date(week.end_date);
+  const start = localDate(week.start_date);
+  const end = localDate(week.end_date);
   end.setHours(23, 59, 59);
   return now >= start && now <= end;
 }
 
 function formatDateRange(start: string | null, end: string | null): string {
   if (!start && !end) return '';
-  const fmt = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const fmt = (d: string) => localDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   if (start && end) return `${fmt(start)} – ${fmt(end)}`;
   return fmt(start || end!);
 }
@@ -354,7 +359,7 @@ function AdminDashboard({
       {sortedLearners.length === 0 ? (
         <div className="text-center py-12 rounded-xl border border-white/[0.05] bg-white/[0.01]">
           <Users className="w-8 h-8 text-white/15 mx-auto mb-3" />
-          <p className="text-sm text-white/30">No learners have progress yet. Invite users from the Supabase dashboard.</p>
+          <p className="text-sm text-white/30">No learners have progress yet.</p>
         </div>
       ) : (
         <div className="space-y-2">
