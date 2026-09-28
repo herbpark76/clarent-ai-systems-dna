@@ -303,44 +303,60 @@ function LearnerDashboard({
 }
 
 // ── Admin Dashboard ────────────────────────────────────
-function AdminDashboard({
-  learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
+function LearnerDetailTabs({
+  selectedLearner, selectedLearnerInfo, weeks, tasks, learnerProgress, adminId,
 }: {
-  learners: LearnerInfo[];
+  selectedLearner: string;
+  selectedLearnerInfo: LearnerInfo;
   weeks: Week[];
   tasks: Task[];
-  onSelectLearner: (learnerId: string) => void;
-  selectedLearner: string | null;
   learnerProgress: ProgressRow[];
-  track: Track;
-  learnerJournalEntries: JournalEntry[];
   adminId: string;
 }) {
-  const sortedLearners = [...learners].sort((a, b) => b.doneCount - a.doneCount);
-  const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
+  const hasJournal = !!selectedLearnerInfo.latestEntryDate;
+  const [detailTab, setDetailTab] = useState<'progress' | 'journal'>(hasJournal ? 'journal' : 'progress');
+  const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
+  const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
 
-  if (selectedLearner && selectedLearnerInfo) {
-    const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
-    const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
+      {/* Back button */}
+      <button
+        onClick={() => {}}
+        className="hidden"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" />
+      </button>
 
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
-        {/* Back button — clearly visible with a pill style */}
+      <div className="flex items-center gap-3 mb-2">
+        <Users className="w-4 h-4 text-cyan-400" />
+        <h1 className="text-xl font-bold text-white">{selectedLearnerInfo.fullName}</h1>
+      </div>
+      <p className="text-sm text-white/40 mb-4">
+        {selectedLearnerInfo.doneCount} of {tasks.length} tasks complete ({Math.round((selectedLearnerInfo.doneCount / Math.max(tasks.length, 1)) * 100)}%)
+      </p>
+
+      {/* Tab toggle */}
+      <div className="inline-flex items-center gap-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08] p-0.5 mb-6">
         <button
-          onClick={() => onSelectLearner('')}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/10 text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.08] mb-6 transition-all"
+          onClick={() => setDetailTab('progress')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+            detailTab === 'progress' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
+          }`}
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to all learners
+          <ListChecks className="w-3.5 h-3.5" /> Progress
         </button>
+        <button
+          onClick={() => setDetailTab('journal')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+            detailTab === 'journal' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
+          }`}
+        >
+          <NotebookPen className="w-3.5 h-3.5" /> Journal
+        </button>
+      </div>
 
-        <div className="flex items-center gap-3 mb-2">
-          <Users className="w-4 h-4 text-cyan-400" />
-          <h1 className="text-xl font-bold text-white">{selectedLearnerInfo.fullName}</h1>
-        </div>
-        <p className="text-sm text-white/40 mb-6">
-          {selectedLearnerInfo.doneCount} of {tasks.length} tasks complete ({Math.round((selectedLearnerInfo.doneCount / Math.max(tasks.length, 1)) * 100)}%)
-        </p>
-
+      {detailTab === 'progress' ? (
         <div className="space-y-4">
           {sortedWeeks.map((week) => {
             const weekTasks = tasks.filter((t) => t.week_id === week.id).sort((a, b) => a.sort_order - b.sort_order);
@@ -374,11 +390,47 @@ function AdminDashboard({
             );
           })}
         </div>
+      ) : (
+        <AdminJournal learnerId={selectedLearner} weeks={weeks} adminId={adminId} />
+      )}
+    </div>
+  );
+}
 
-        {/* Journal section */}
-        <div className="mt-8">
-          <AdminJournal learnerId={selectedLearner} weeks={weeks} adminId={adminId} />
-        </div>
+function AdminDashboard({
+  learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
+}: {
+  learners: LearnerInfo[];
+  weeks: Week[];
+  tasks: Task[];
+  onSelectLearner: (learnerId: string) => void;
+  selectedLearner: string | null;
+  learnerProgress: ProgressRow[];
+  track: Track;
+  learnerJournalEntries: JournalEntry[];
+  adminId: string;
+}) {
+  const sortedLearners = [...learners].sort((a, b) => b.doneCount - a.doneCount);
+  const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
+
+  if (selectedLearner && selectedLearnerInfo) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
+        {/* Back button */}
+        <button
+          onClick={() => onSelectLearner('')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/10 text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.08] mb-6 transition-all"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to all learners
+        </button>
+        <LearnerDetailTabs
+          selectedLearner={selectedLearner}
+          selectedLearnerInfo={selectedLearnerInfo}
+          weeks={weeks}
+          tasks={tasks}
+          learnerProgress={learnerProgress}
+          adminId={adminId}
+        />
       </div>
     );
   }
