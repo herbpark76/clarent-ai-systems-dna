@@ -3,10 +3,15 @@ import { Link } from 'react-router-dom';
 import {
   Loader2, LogOut, CheckCircle2, Circle, PlayCircle,
   BookOpen, Calendar, Users, ChevronRight, ArrowLeft,
-  GraduationCap, TrendingUp, Eye, ListChecks,
+  GraduationCap, TrendingUp, Eye, ListChecks, NotebookPen,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
+import {
+  TraineeJournal, AdminJournal,
+  getEntryCountByWeek, getLatestEntryDate,
+  type JournalEntry,
+} from '../components/Journal';
 
 // ── Types ──────────────────────────────────────────────
 type TaskStatus = 'not_started' | 'in_progress' | 'done';
@@ -48,6 +53,7 @@ interface LearnerInfo {
   fullName: string;
   doneCount: number;
   currentWeek: number | null;
+  latestEntryDate: string | null;
 }
 
 // ── Auth Gate ──────────────────────────────────────────
@@ -121,6 +127,11 @@ function formatDateRange(start: string | null, end: string | null): string {
   return fmt(start || end!);
 }
 
+function fmtJournalDate(d: string): string {
+  const [y, m, dd] = d.split('-').map(Number);
+  return new Date(y, m - 1, dd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 function getInitials(name: string): string {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
@@ -131,6 +142,7 @@ function getInitials(name: string): string {
 // ── Learner Dashboard ──────────────────────────────────
 function LearnerDashboard({
   track, weeks, tasks, progress, onToggleTask, fullName, readOnly = false,
+  journalEntries, onJumpToJournal,
 }: {
   track: Track;
   weeks: Week[];
@@ -139,6 +151,9 @@ function LearnerDashboard({
   onToggleTask: (taskId: string, currentStatus: TaskStatus) => void;
   fullName: string;
   readOnly?: boolean;
+  learnerId: string;
+  journalEntries: JournalEntry[];
+  onJumpToJournal: () => void;
 }) {
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const totalTasks = tasks.length;
@@ -146,9 +161,10 @@ function LearnerDashboard({
   const pct = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0;
   const noop = () => {};
   const handleToggle = readOnly ? noop : onToggleTask;
+  const entryCountByWeek = getEntryCountByWeek(journalEntries);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-24">
       {/* Track header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
@@ -225,6 +241,18 @@ function LearnerDashboard({
                 </div>
               </div>
 
+              {/* Journal link */}
+              {(entryCountByWeek.get(week.id) || 0) > 0 && (
+                <div className="px-5 pb-2">
+                  <button
+                    onClick={onJumpToJournal}
+                    className="inline-flex items-center gap-1 text-[10px] text-cyan-400/60 hover:text-cyan-400 transition-colors"
+                  >
+                    <NotebookPen className="w-2.5 h-2.5" /> Journal: {entryCountByWeek.get(week.id)} {entryCountByWeek.get(week.id) === 1 ? 'entry' : 'entries'}
+                  </button>
+                </div>
+              )}
+
               {/* Task checklist */}
               <div className="px-5 py-3">
                 {weekTasks.length === 0 ? (
@@ -276,7 +304,7 @@ function LearnerDashboard({
 
 // ── Admin Dashboard ────────────────────────────────────
 function AdminDashboard({
-  learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track,
+  learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
 }: {
   learners: LearnerInfo[];
   weeks: Week[];
@@ -285,6 +313,8 @@ function AdminDashboard({
   selectedLearner: string | null;
   learnerProgress: ProgressRow[];
   track: Track;
+  learnerJournalEntries: JournalEntry[];
+  adminId: string;
 }) {
   const sortedLearners = [...learners].sort((a, b) => b.doneCount - a.doneCount);
   const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
@@ -294,7 +324,7 @@ function AdminDashboard({
     const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
 
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
         {/* Back button — clearly visible with a pill style */}
         <button
           onClick={() => onSelectLearner('')}
@@ -344,12 +374,17 @@ function AdminDashboard({
             );
           })}
         </div>
+
+        {/* Journal section */}
+        <div className="mt-8">
+          <AdminJournal learnerId={selectedLearner} weeks={weeks} adminId={adminId} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
       <div className="flex items-center gap-3 mb-2">
         <Users className="w-4 h-4 text-cyan-400" />
         <h1 className="text-xl font-bold text-white">Learner Progress</h1>
@@ -379,7 +414,7 @@ function AdminDashboard({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">{learner.fullName}</p>
                   <p className="text-[10px] text-white/30 mt-0.5">
-                    {learner.doneCount}/{tasks.length} tasks{learner.currentWeek ? ` · Week ${learner.currentWeek}` : ''}
+                    {learner.doneCount}/{tasks.length} tasks{learner.currentWeek ? ` · Week ${learner.currentWeek}` : ''}{learner.latestEntryDate ? ` · Journal: ${fmtJournalDate(learner.latestEntryDate)}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
@@ -421,6 +456,11 @@ export default function LearnPortal() {
   const [selectedLearner, setSelectedLearner] = useState<string | null>(null);
   const [learnerProgress, setLearnerProgress] = useState<ProgressRow[]>([]);
   const [adminView, setAdminView] = useState<'learners' | 'preview'>('learners');
+
+  // Journal data
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [learnerJournalEntries, setLearnerJournalEntries] = useState<JournalEntry[]>([]);
+  const [traineeView, setTraineeView] = useState<'track' | 'journal'>('track');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -525,9 +565,28 @@ export default function LearnPortal() {
             fullName: profileMap.get(lId) || 'Unknown learner',
             doneCount,
             currentWeek,
+            latestEntryDate: null,
           });
         }
-        if (!cancelled) setLearners(learnerInfos);
+        // Load all journal entries to get latest dates + learner-specific entries
+        const { data: allJournal } = await supabase
+          .from('lp_journal_entries')
+          .select('*')
+          .order('entry_date', { ascending: false });
+        if (cancelled) return;
+        const journalRows = (allJournal || []) as JournalEntry[];
+        setLearnerJournalEntries(journalRows);
+        // Update learnerInfos with latest entry dates
+        const journalByLearner = new Map<string, JournalEntry[]>();
+        for (const je of journalRows) {
+          if (!journalByLearner.has(je.learner_id)) journalByLearner.set(je.learner_id, []);
+          journalByLearner.get(je.learner_id)!.push(je);
+        }
+        const updatedInfos = learnerInfos.map((li) => {
+          const lEntries = journalByLearner.get(li.id) || [];
+          return { ...li, latestEntryDate: getLatestEntryDate(lEntries) };
+        });
+        if (!cancelled) setLearners(updatedInfos);
       })();
     } else {
       if (!userId) return;
@@ -536,6 +595,14 @@ export default function LearnPortal() {
         if (cancelled) return;
         const rows = (data || []) as ProgressRow[];
         setProgressMap(new Map(rows.map((r) => [r.task_id, r])));
+        // Load journal entries for this learner
+        const { data: jData } = await supabase
+          .from('lp_journal_entries')
+          .select('*')
+          .eq('learner_id', userId)
+          .order('entry_date', { ascending: false });
+        if (cancelled) return;
+        setJournalEntries((jData || []) as JournalEntry[]);
       })();
     }
     return () => { cancelled = true; };
@@ -683,6 +750,8 @@ export default function LearnPortal() {
               selectedLearner={selectedLearner}
               learnerProgress={learnerProgress}
               track={track}
+              learnerJournalEntries={learnerJournalEntries}
+              adminId={userId}
             />
           )}
 
@@ -702,19 +771,53 @@ export default function LearnPortal() {
                 onToggleTask={() => {}}
                 fullName={fullName}
                 readOnly
+                learnerId={userId}
+                journalEntries={[]}
+                onJumpToJournal={() => {}}
               />
             </>
           )}
         </>
       ) : (
-        <LearnerDashboard
-          track={track}
-          weeks={weeks}
-          tasks={tasks}
-          progress={progressMap}
-          onToggleTask={handleToggleTask}
-          fullName={fullName}
-        />
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+          {/* Trainee tab toggle: Track | Journal */}
+          <div className="inline-flex items-center gap-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08] p-0.5 mb-6">
+            <button
+              onClick={() => setTraineeView('track')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                traineeView === 'track' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" /> Track
+            </button>
+            <button
+              onClick={() => setTraineeView('journal')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                traineeView === 'journal' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
+              }`}
+            >
+              <NotebookPen className="w-3.5 h-3.5" /> Journal
+            </button>
+          </div>
+
+          {traineeView === 'journal' ? (
+            <div className="pt-2">
+              <TraineeJournal learnerId={userId} weeks={weeks} />
+            </div>
+          ) : (
+            <LearnerDashboard
+              track={track}
+              weeks={weeks}
+              tasks={tasks}
+              progress={progressMap}
+              onToggleTask={handleToggleTask}
+              fullName={fullName}
+              learnerId={userId}
+              journalEntries={journalEntries}
+              onJumpToJournal={() => setTraineeView('journal')}
+            />
+          )}
+        </div>
       )}
 
       {/* Back link */}
