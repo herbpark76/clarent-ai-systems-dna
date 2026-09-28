@@ -414,7 +414,7 @@ function AdminDashboard({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">{learner.fullName}</p>
                   <p className="text-[10px] text-white/30 mt-0.5">
-                    {learner.doneCount}/{tasks.length} tasks{learner.currentWeek ? ` · Week ${learner.currentWeek}` : ''}{learner.latestEntryDate ? ` · Journal: ${fmtJournalDate(learner.latestEntryDate)}` : ''}
+                    {learner.doneCount}/{tasks.length} tasks{learner.currentWeek ? ` · Week ${learner.currentWeek}` : ''}{learner.latestEntryDate ? ` · Journal: ${fmtJournalDate(learner.latestEntryDate)}` : ' · No journal entries yet'}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
@@ -524,27 +524,32 @@ export default function LearnPortal() {
     let cancelled = false;
     if (isAdmin) {
       (async () => {
+        // 1. Fetch all trainees (including those with no progress)
+        const { data: trainees } = await supabase.rpc('lp_list_trainees');
+        if (cancelled) return;
+        const traineeRows = (trainees || []) as { id: string; full_name: string }[];
+
+        // 2. Fetch all progress
         const { data: allProgress } = await supabase.from('lp_progress').select('*');
         if (cancelled) return;
         const rows = (allProgress || []) as ProgressRow[];
-        const { data: profiles } = await supabase.from('lp_profiles').select('id, full_name');
-        if (cancelled) return;
-        const profileMap = new Map<string, string>(
-          (profiles || []).map((p: any) => [p.id, p.full_name || 'Unknown'])
-        );
+
         const byLearner = new Map<string, ProgressRow[]>();
         for (const r of rows) {
           if (!byLearner.has(r.learner_id)) byLearner.set(r.learner_id, []);
           byLearner.get(r.learner_id)!.push(r);
         }
+
         const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
-        const learnerInfos: LearnerInfo[] = [];
-        for (const [lId, pRows] of byLearner) {
+
+        // 3. Build learner infos from ALL trainees, not just those with progress
+        const learnerInfos: LearnerInfo[] = traineeRows.map((t) => {
+          const pRows = byLearner.get(t.id) || [];
           const doneCount = pRows.filter((p) => p.status === 'done').length;
           let currentWeek: number | null = null;
           for (const w of sortedWeeks) {
-            const wTasks = tasks.filter((t) => t.week_id === w.id);
-            const allDone = wTasks.every((t) => pRows.find((p) => p.task_id === t.id && p.status === 'done'));
+            const wTasks = tasks.filter((tk) => tk.week_id === w.id);
+            const allDone = wTasks.every((tk) => pRows.find((p) => p.task_id === tk.id && p.status === 'done'));
             if (!allDone && wTasks.length > 0) {
               currentWeek = w.week_number;
               break;
@@ -552,23 +557,24 @@ export default function LearnPortal() {
           }
           if (currentWeek === null && doneCount > 0 && doneCount < tasks.length) {
             for (const w of sortedWeeks) {
-              const wTasks = tasks.filter((t) => t.week_id === w.id);
-              const hasProgress = wTasks.some((t) => pRows.find((p) => p.task_id === t.id));
+              const wTasks = tasks.filter((tk) => tk.week_id === w.id);
+              const hasProgress = wTasks.some((tk) => pRows.find((p) => p.task_id === tk.id));
               if (!hasProgress) {
                 currentWeek = w.week_number;
                 break;
               }
             }
           }
-          learnerInfos.push({
-            id: lId,
-            fullName: profileMap.get(lId) || 'Unknown learner',
+          return {
+            id: t.id,
+            fullName: t.full_name || 'Unknown learner',
             doneCount,
             currentWeek,
             latestEntryDate: null,
-          });
-        }
-        // Load all journal entries to get latest dates + learner-specific entries
+          };
+        });
+
+        // 4. Load all journal entries for latest dates
         const { data: allJournal } = await supabase
           .from('lp_journal_entries')
           .select('*')
@@ -576,7 +582,6 @@ export default function LearnPortal() {
         if (cancelled) return;
         const journalRows = (allJournal || []) as JournalEntry[];
         setLearnerJournalEntries(journalRows);
-        // Update learnerInfos with latest entry dates
         const journalByLearner = new Map<string, JournalEntry[]>();
         for (const je of journalRows) {
           if (!journalByLearner.has(je.learner_id)) journalByLearner.set(je.learner_id, []);
