@@ -325,11 +325,9 @@ function stripSponsoredSections(text: string): string {
   const result: string[] = [];
   let skipping = false;
 
-  // Markers that start a sponsored section
-  const sponsoredStart = /^(presented by|sponsored by|together with|brought to you by|in partnership with|our partner)\b/i;
-
-  // Lines that indicate the next editorial section has started
-  const editorialResume = /^(#{1,6}\s|[A-Z][A-Z \-]{3,}:|Roundtable|Community AI Workflow|Deep Dive|Quick Hit|Spotlight|Featured|Breaking|Update|In Focus|Editor's Note|Top Story)\b/i;
+  // Marker must be the ENTIRE line (allow trailing colon), not just a prefix.
+  // This prevents matching editorial prose like "In partnership with OpenAI, the university..."
+  const sponsoredStart = /^(presented by|sponsored by|together with|brought to you by|in partnership with|our partner)[:\s]*$/i;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -341,20 +339,13 @@ function stripSponsoredSections(text: string): string {
     }
 
     if (skipping) {
-      // Resume when we hit a blank line followed by editorial content,
-      // or an explicit editorial section heading
+      // Resume on the first blank line after the sponsored marker.
+      // Sponsored sections in newsletters are always short blurbs followed
+      // by a blank line before the next editorial story.
       if (trimmed === "") {
-        // Peek ahead: if next non-empty line looks editorial, resume
-        let j = i + 1;
-        while (j < lines.length && lines[j].trim() === "") j++;
-        if (j >= lines.length || editorialResume.test(lines[j].trim()) || !sponsoredStart.test(lines[j].trim())) {
-          skipping = false;
-          // Don't skip this blank line — keep it as a separator
-          result.push(line);
-        }
-        continue;
+        skipping = false;
+        result.push(line);
       }
-      // Still inside sponsored content — skip this line
       continue;
     }
 
@@ -385,7 +376,7 @@ function extractSiteName(url: string, html?: string): string | null {
     if (parts.length < 2) return host;
     const subdomain = parts[0].toLowerCase();
     const base = parts[parts.length - 2].toLowerCase();
-    const subdomainMap: Record<string, string> = { therundownai: "The Rundown AI", tldr: "TLDR AI", thebatch: "The Batch", natter: "Natter" };
+    const subdomainMap: Record<string, string> = { therundownai: "The Rundown AI", tech: "The Rundown Tech", tldr: "TLDR AI", thebatch: "The Batch", natter: "Natter" };
     if (subdomainMap[subdomain]) return subdomainMap[subdomain];
     const hostingDomains = new Set(["beehiiv", "substack", "squarespace", "ghost"]);
     if (hostingDomains.has(base) && subdomain !== "www" && subdomain.length > 0) {
@@ -397,16 +388,50 @@ function extractSiteName(url: string, html?: string): string | null {
   } catch { return null; }
 }
 
+// ── Parse and validate ISO date from various formats ──
+function parseIsoDate(raw: string): string | null {
+  const trimmed = raw.trim();
+  // Already ISO: 2026-10-09...
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    const month = parseInt(m, 10);
+    const day = parseInt(d, 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${y}-${m}-${d}`;
+    }
+  }
+  // Try Date.parse for formats like "October 9, 2026" or "Oct 9 2026"
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, "0");
+    const d = String(parsed.getDate()).padStart(2, "0");
+    if (y >= 2000 && y <= 2100) return `${y}-${m}-${d}`;
+  }
+  return null;
+}
+
 // ── Extract publish date from HTML ─────────────────────
 function extractPublishDate(html: string): string | null {
+  const candidates: string[] = [];
   let match = html.match(/<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["']/i);
-  if (match) return match[1].slice(0, 10);
+  if (match) candidates.push(match[1]);
+  match = html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']article:published_time["']/i);
+  if (match) candidates.push(match[1]);
   match = html.match(/<meta[^>]+name=["'](?:date|publish_date|publication_date)["'][^>]+content=["']([^"']+)["']/i);
-  if (match) return match[1].slice(0, 10);
+  if (match) candidates.push(match[1]);
+  match = html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["'](?:date|publish_date|publication_date)["']/i);
+  if (match) candidates.push(match[1]);
   match = html.match(/<time[^>]+datetime=["']([^"']+)["']/i);
-  if (match) return match[1].slice(0, 10);
+  if (match) candidates.push(match[1]);
   match = html.match(/"datePublished"\s*:\s*"([^"]+)"/);
-  if (match) return match[1].slice(0, 10);
+  if (match) candidates.push(match[1]);
+
+  for (const raw of candidates) {
+    const iso = parseIsoDate(raw);
+    if (iso) return iso;
+  }
   return null;
 }
 

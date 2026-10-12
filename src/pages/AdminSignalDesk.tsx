@@ -1078,14 +1078,15 @@ export default function AdminSignalDesk() {
         if (total === 0) {
           const msg = result.message || result.validation_errors?.join('; ') || 'No valid entries found in the text.';
           setProcessMsg({ type: 'info', text: msg });
+          // Preserve inputs on zero-entries so admin can adjust and retry
         } else {
           const parts: string[] = [`${newCount} new`];
           if (dupCount > 0) parts.push(`${dupCount} possible duplicate${dupCount > 1 ? 's' : ''}`);
           if (needsAttn > 0) parts.push(`${needsAttn} need${needsAttn > 1 ? '' : 's'} attention`);
           setProcessMsg({ type: 'success', text: `${parts.join(', ')} entries saved as drafts.` });
+          setProcessText('');
+          setProcessUrl('');
         }
-        setProcessText('');
-        setProcessUrl('');
         loadEntries();
         loadModelEntries();
       }
@@ -1426,6 +1427,21 @@ export default function AdminSignalDesk() {
   };
 
   const handleUpdate = async (id: string, patch: Partial<SignalEntry>) => {
+    // If source_date or source_name is being updated, sync into sources[0]
+    // so public display (which reads sources[0].date) stays consistent.
+    if (patch.source_date !== undefined || patch.source_name !== undefined) {
+      const entry = entries.find((e) => e.id === id);
+      if (entry) {
+        const currentSources = getSources(entry);
+        const updatedFirst = {
+          name: patch.source_name !== undefined ? patch.source_name : (currentSources[0]?.name ?? entry.source_name ?? null),
+          date: patch.source_date !== undefined ? patch.source_date : (currentSources[0]?.date ?? entry.source_date ?? null),
+          url: currentSources[0]?.url ?? entry.source_url ?? null,
+        };
+        const remaining = currentSources.slice(1);
+        patch.sources = [updatedFirst, ...remaining];
+      }
+    }
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
     const { error } = await supabase.from('signal_desk_entries').update(patch).eq('id', id);
     if (error) {
