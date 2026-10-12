@@ -6,10 +6,10 @@ import {
   Newspaper, AlertCircle, CheckCircle2, ExternalLink,
   Layers, Tag, Briefcase, Building2, ChevronDown, Link2,
   GitMerge, XCircle, Copy, Cpu, Trophy, Plus, FileText, PenLine,
-  AlertTriangle, ScanLine, X, RotateCw,
+  AlertTriangle, ScanLine, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { reviewDraft, type ReviewProposal } from '../lib/qualityReview';
+import { reviewDraft, reReviewAfterApply, type ReviewProposal, type ReviewSummary } from '../lib/qualityReview';
 import NavBar from '../components/NavBar';
 
 // ── Types ──────────────────────────────────────────────
@@ -669,7 +669,7 @@ function RecheckModal({
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.08]">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <ScanLine className="w-4 h-4 text-cyan-400" />
-            Proposed Quality Review Changes
+            Quality Review Results
           </h3>
           <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors">
             <X className="w-4 h-4" />
@@ -677,7 +677,7 @@ function RecheckModal({
         </div>
         <div className="overflow-y-auto px-5 py-4 space-y-3">
           <p className="text-xs text-white/40 leading-relaxed">
-            Review the proposed changes below. Select which entries to update. Manual edits you made will be preserved unless the title is being cleaned.
+            Proposed corrections are shown first (blue). Unresolved issues requiring your attention are shown below (orange). Select which entries to apply corrections to — manually edited fields will not be changed.
           </p>
           {proposals.map((p) => {
             const isSelected = selected.has(p.id);
@@ -706,21 +706,44 @@ function RecheckModal({
                         {p.proposed_review_status.replace(/_/g, ' ')}
                       </span>
                     </div>
-                    {p.proposed_title && (
-                      <div className="mt-2 px-2 py-1.5 rounded bg-white/[0.04] border border-white/[0.06]">
-                        <span className="text-[9px] text-white/30 uppercase tracking-wide">Title clean</span>
-                        <p className="text-[11px] text-cyan-300/80 mt-0.5">{p.proposed_title}</p>
+
+                    {/* Proposed corrections (automatic) */}
+                    {p.corrections.length > 0 && (
+                      <div className="mt-2 space-y-1.5">
+                        <span className="text-[9px] text-cyan-400/60 uppercase tracking-wide">Proposed corrections</span>
+                        {p.corrections.map((c, i) => (
+                          <div key={i} className="px-2 py-1.5 rounded bg-cyan-500/[0.06] border border-cyan-500/15">
+                            <p className="text-[10px] text-cyan-300/70">{c.description}</p>
+                            <div className="flex items-center gap-1.5 mt-1 text-[11px]">
+                              <span className="text-white/40 line-through truncate">{c.before}</span>
+                              <span className="text-cyan-400/60">→</span>
+                              <span className="text-cyan-300 truncate">{c.after}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    {p.changes.length > 0 && (
-                      <ul className="mt-2 space-y-0.5">
-                        {p.changes.map((n, i) => (
-                          <li key={i} className="text-[11px] text-orange-200/60 leading-relaxed flex items-start gap-1">
-                            <AlertTriangle className="w-2.5 h-2.5 text-orange-400/50 flex-shrink-0 mt-0.5" />
-                            {n}
-                          </li>
-                        ))}
-                      </ul>
+
+                    {/* Unresolved issues (need admin attention) */}
+                    {p.issues.length > 0 && (
+                      <div className="mt-2 space-y-0.5">
+                        <span className="text-[9px] text-orange-400/60 uppercase tracking-wide">Unresolved issues</span>
+                        <ul className="space-y-0.5 mt-0.5">
+                          {p.issues.map((issue, i) => (
+                            <li key={i} className="text-[11px] text-orange-200/60 leading-relaxed flex items-start gap-1">
+                              <AlertTriangle className="w-2.5 h-2.5 text-orange-400/50 flex-shrink-0 mt-0.5" />
+                              <span><span className="text-orange-300/70 font-medium">{issue.field}:</span> {issue.message}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* No issues — all clear */}
+                    {p.corrections.length === 0 && p.issues.length === 0 && (
+                      <p className="mt-1.5 text-[11px] text-green-400/60 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> All checks passed.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -730,7 +753,7 @@ function RecheckModal({
         </div>
         <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.08]">
           <span className="text-[10px] text-white/35">
-            {selected.size} of {proposals.length} selected
+            {selected.size} of {proposals.length} selected — only corrections will be applied
           </span>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-3 py-1.5 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">
@@ -740,7 +763,7 @@ function RecheckModal({
               onClick={() => onApply(Array.from(selected))}
               disabled={selected.size === 0}
               className="px-3 py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/30 disabled:opacity-40 transition-all">
-              Apply {selected.size > 0 ? `(${selected.size})` : ''}
+              Apply corrections {selected.size > 0 ? `(${selected.size})` : ''}
             </button>
           </div>
         </div>
@@ -773,6 +796,7 @@ export default function AdminSignalDesk() {
   const [recheckProgress, setRecheckProgress] = useState<{ done: number; total: number } | null>(null);
   const [recheckMsg, setRecheckMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [recheckProposals, setRecheckProposals] = useState<ReviewProposal[] | null>(null);
+  const [recheckSummary, setRecheckSummary] = useState<ReviewSummary | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -943,25 +967,72 @@ export default function AdminSignalDesk() {
     if (normalDrafts.length === 0) return;
     setRecheckLoading(true);
     setRecheckMsg(null);
+    setRecheckProposals(null);
+    setRecheckSummary(null);
     setRecheckProgress({ done: 0, total: normalDrafts.length });
 
     try {
-      const proposals: ReviewProposal[] = [];
+      const allProposals: ReviewProposal[] = [];
       const BATCH = 3;
       for (let i = 0; i < normalDrafts.length; i += BATCH) {
         const batch = normalDrafts.slice(i, i + BATCH);
         for (const entry of batch) {
-          proposals.push(reviewDraft(entry));
+          allProposals.push(reviewDraft(entry));
         }
         setRecheckProgress({ done: Math.min(i + BATCH, normalDrafts.length), total: normalDrafts.length });
         await new Promise((r) => setTimeout(r, 50));
       }
 
-      const withChanges = proposals.filter((p) => p.changes.length > 0);
-      if (withChanges.length === 0) {
-        setRecheckMsg({ type: 'info', text: 'No quality issues found — all drafts look good.' });
+      // Save check results to DB for ALL entries — not just those with changes
+      let savedCount = 0;
+      let failedCount = 0;
+      for (const p of allProposals) {
+        const patch = {
+          review_status: p.proposed_review_status,
+          review_notes: p.proposed_review_notes,
+        };
+        const { error } = await supabase
+          .from('signal_desk_entries')
+          .update(patch)
+          .eq('id', p.id);
+        if (error) {
+          failedCount++;
+        } else {
+          savedCount++;
+          setEntries((prev) => prev.map((e) =>
+            e.id === p.id ? { ...e, review_status: p.proposed_review_status, review_notes: p.proposed_review_notes } : e
+          ));
+        }
+      }
+
+      const summary: ReviewSummary = {
+        checked: allProposals.length,
+        withCorrections: allProposals.filter((p) => p.corrections.length > 0).length,
+        ready: allProposals.filter((p) => p.proposed_review_status === 'ready_for_review').length,
+        needsAttention: allProposals.filter((p) => p.proposed_review_status === 'needs_attention').length,
+        failed: failedCount,
+      };
+      setRecheckSummary(summary);
+
+      // Show proposals for entries that have corrections OR issues
+      const withProposals = allProposals.filter((p) => p.corrections.length > 0 || p.issues.length > 0);
+      if (withProposals.length > 0) {
+        setRecheckProposals(withProposals);
+      }
+
+      // Build completion message
+      const parts: string[] = [`${summary.checked} checked`];
+      if (summary.withCorrections > 0) parts.push(`${summary.withCorrections} with proposed corrections`);
+      if (summary.ready > 0) parts.push(`${summary.ready} ready`);
+      if (summary.needsAttention > 0) parts.push(`${summary.needsAttention} need attention`);
+      if (summary.failed > 0) parts.push(`${summary.failed} failed to save`);
+
+      if (summary.failed > 0) {
+        setRecheckMsg({ type: 'error', text: `${parts.join(', ')}. Retry to re-save failed entries.` });
+      } else if (summary.needsAttention > 0) {
+        setRecheckMsg({ type: 'info', text: `${parts.join(', ')}. Review proposed changes below.` });
       } else {
-        setRecheckProposals(withChanges);
+        setRecheckMsg({ type: 'success', text: `${parts.join(', ')}. All drafts passed quality checks.` });
       }
     } catch (err) {
       setRecheckMsg({ type: 'error', text: `Recheck failed: ${(err as Error)?.message || 'Unknown error'}` });
@@ -984,11 +1055,13 @@ export default function AdminSignalDesk() {
     const failedIds: string[] = [];
 
     for (const p of toApply) {
-      const patch: Partial<SignalEntry> = {
-        review_status: p.proposed_review_status as ReviewStatus,
-        review_notes: p.proposed_review_notes || null,
-      };
+      // Apply only the corrections the admin approved — don't touch other fields
+      const patch: Partial<SignalEntry> = {};
       if (p.proposed_title) patch.title = p.proposed_title;
+
+      // Only apply corrections that were proposed (title prefix removal)
+      // Status and notes will be recalculated after applying corrections
+      if (Object.keys(patch).length === 0) continue;
 
       const { error } = await supabase.from('signal_desk_entries').update(patch).eq('id', p.id);
       if (error) {
@@ -996,22 +1069,33 @@ export default function AdminSignalDesk() {
         failedIds.push(p.id);
       } else {
         applied++;
+        // Update local state with the corrected title
         setEntries((prev) => prev.map((e) =>
           e.id === p.id ? { ...e, ...patch } : e
         ));
+
+        // Re-review the entry with the corrected title to recalculate status
+        const entry = entries.find((e) => e.id === p.id);
+        if (entry) {
+          const reReview = reReviewAfterApply(entry, patch.title);
+          await supabase
+            .from('signal_desk_entries')
+            .update({ review_status: reReview.status, review_notes: reReview.notes })
+            .eq('id', p.id);
+          setEntries((prev) => prev.map((e) =>
+            e.id === p.id ? { ...e, review_status: reReview.status, review_notes: reReview.notes } : e
+          ));
+        }
       }
     }
 
     if (failed > 0) {
-      setRecheckMsg({ type: 'error', text: `${applied} updated, ${failed} failed. Click Recheck again to retry the ${failed} that failed.` });
-      if (applied === 0) {
-        setRecheckProposals((prev) => prev?.filter((p) => failedIds.includes(p.id)) || null);
-      } else {
-        setRecheckProposals((prev) => prev?.filter((p) => failedIds.includes(p.id)) || null);
-      }
+      setRecheckMsg({ type: 'error', text: `${applied} corrections applied, ${failed} failed. Click Recheck again to retry.` });
+      setRecheckProposals((prev) => prev?.filter((p) => failedIds.includes(p.id)) || null);
     } else {
-      setRecheckMsg({ type: 'success', text: `Applied quality review updates to ${applied} entr${applied === 1 ? 'y' : 'ies'}.` });
+      setRecheckMsg({ type: 'success', text: `Applied ${applied} correction${applied === 1 ? '' : 's'}. Status recalculated from remaining issues.` });
       setRecheckProposals(null);
+      loadEntries();
     }
   };
 
@@ -1191,7 +1275,6 @@ export default function AdminSignalDesk() {
   // Separate drafts and possible duplicates
   const normalDrafts = entries.filter((e) => e.duplicate_status !== 'possible');
   const possibleDups = entries.filter((e) => e.duplicate_status === 'possible');
-  const needsAttentionCount = normalDrafts.filter((e) => e.review_status === 'needs_attention').length;
   const filteredDrafts = reviewFilter === 'all' ? normalDrafts
     : reviewFilter === 'not_checked' ? normalDrafts.filter((e) => !e.review_status || e.review_status === 'not_checked')
     : normalDrafts.filter((e) => e.review_status === reviewFilter);
@@ -1363,6 +1446,11 @@ export default function AdminSignalDesk() {
                       {recheckMsg.type === 'success' ? <CheckCircle2 className="w-3 h-3" />
                        : recheckMsg.type === 'error' ? <AlertCircle className="w-3 h-3" /> : null}
                       {recheckMsg.text}
+                    </span>
+                  )}
+                  {recheckSummary && !recheckMsg && (
+                    <span className="text-[10px] text-white/30">
+                      {recheckSummary.checked} checked · {recheckSummary.ready} ready · {recheckSummary.needsAttention} need attention · {recheckSummary.withCorrections} corrections
                     </span>
                   )}
                 </div>

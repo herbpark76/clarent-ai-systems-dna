@@ -2,15 +2,36 @@ import type { SignalEntry } from './signalDesk';
 
 export type ReviewStatus = 'ready_for_review' | 'needs_attention' | 'not_checked';
 
+export interface Correction {
+  field: string;
+  before: string;
+  after: string;
+  description: string;
+}
+
+export interface Issue {
+  field: string;
+  message: string;
+}
+
 export interface ReviewProposal {
   id: string;
   title: string;
   type: string;
   current_review_status: string;
   proposed_review_status: ReviewStatus;
-  proposed_review_notes: string;
+  proposed_review_notes: string | null;
+  corrections: Correction[];
+  issues: Issue[];
   proposed_title?: string;
-  changes: string[];
+}
+
+export interface ReviewSummary {
+  checked: number;
+  withCorrections: number;
+  ready: number;
+  needsAttention: number;
+  failed: number;
 }
 
 const TITLE_PREFIXES = [
@@ -27,9 +48,8 @@ export function cleanTitle(title: string): string {
 }
 
 interface ReviewResult {
-  status: 'ready_for_review' | 'needs_attention';
-  notes: string[];
-  cleaned_title?: string;
+  issues: Issue[];
+  corrections: Correction[];
 }
 
 export function reviewEntry(entry: {
@@ -50,57 +70,88 @@ export function reviewEntry(entry: {
   price_input: string | null;
   price_output: string | null;
   result: string | null;
+  source_name: string | null;
+  source_url: string | null;
 }): ReviewResult {
-  const notes: string[] = [];
+  const issues: Issue[] = [];
+  const corrections: Correction[] = [];
   const title = entry.title || '';
   const cleanedTitle = cleanTitle(title);
 
+  // Title prefix correction — a correction, not an issue
   if (cleanedTitle !== title) {
-    notes.push(`Title had newsletter prefix; cleaned from "${title.slice(0, 60)}" to "${cleanedTitle.slice(0, 60)}"`);
+    corrections.push({
+      field: 'title',
+      before: title,
+      after: cleanedTitle,
+      description: 'Remove newsletter title prefix',
+    });
   }
 
-  if (entry.type === 'tutorial') {
-    const steps = entry.steps || [];
-    if (steps.length === 0) {
-      notes.push('Tutorial has no steps — source may not provide actionable instructions');
-    }
-  }
+  // Use the cleaned title for length checks
+  const titleForChecks = cleanedTitle || title;
 
-  if (entry.type === 'use_case') {
-    if (!entry.result && !entry.how_its_built) {
-      notes.push('Use case missing result/outcome — source may not provide enough detail');
-    }
+  if (titleForChecks.length < 10) {
+    issues.push({ field: 'title', message: 'Title is very short — may need more detail' });
   }
-
-  if (cleanedTitle.length < 10) {
-    notes.push('Title is very short — may need more detail');
-  }
-  if (cleanedTitle.length > 200) {
-    notes.push('Title is very long — consider trimming');
+  if (titleForChecks.length > 200) {
+    issues.push({ field: 'title', message: 'Title is very long — consider trimming' });
   }
 
   if ((entry.summary || '').length < 30) {
-    notes.push('Summary is very short — may need more detail');
+    issues.push({ field: 'summary', message: 'Summary is very short — may need more detail' });
   }
 
-  if (entry.type === 'model_release' && !entry.model_name) {
-    notes.push('Model release has no model_name');
-  }
-
-  if (entry.system_layer === null && entry.type !== 'news' && entry.type !== 'use_case') {
-    notes.push(`Type "${entry.type}" has no system_layer — verify this is correct`);
-  }
-
-  if (entry.benchmark_score !== null && entry.benchmark_score !== undefined) {
-    if (typeof entry.benchmark_score !== 'number' || isNaN(entry.benchmark_score)) {
-      notes.push('Benchmark score is not a valid number');
+  // Tutorial completeness: needs usable ordered steps
+  if (entry.type === 'tutorial') {
+    const steps = entry.steps || [];
+    if (steps.length === 0) {
+      issues.push({ field: 'steps', message: 'Tutorial has no steps — source may not provide actionable instructions' });
+    } else {
+      const emptySteps = steps.filter((s) => !s.text || s.text.trim().length < 5);
+      if (emptySteps.length > 0) {
+        issues.push({ field: 'steps', message: `${emptySteps.length} step(s) have very little text — may not be actionable` });
+      }
     }
   }
 
-  const status = notes.length > 0 ? 'needs_attention' : 'ready_for_review';
-  const result: ReviewResult = { status, notes };
-  if (cleanedTitle !== title) result.cleaned_title = cleanedTitle;
-  return result;
+  // Use case completeness: needs Problem, Tool, Steps, and Result
+  if (entry.type === 'use_case') {
+    if (!entry.how_its_built && !entry.summary) {
+      issues.push({ field: 'how_its_built', message: 'Use case missing structured problem/tool description' });
+    }
+    if (!entry.result) {
+      issues.push({ field: 'result', message: 'Use case missing result/outcome — source may not provide enough detail' });
+    }
+    const steps = entry.steps || [];
+    if (steps.length === 0) {
+      issues.push({ field: 'steps', message: 'Use case has no steps — expected structured workflow' });
+    }
+  }
+
+  // Model release checks
+  if (entry.type === 'model_release' && !entry.model_name) {
+    issues.push({ field: 'model_name', message: 'Model release has no model_name' });
+  }
+
+  // AI DNA category check — system_layer must be set for non-news types
+  if (entry.system_layer === null && entry.type !== 'news') {
+    issues.push({ field: 'system_layer', message: `Type "${entry.type}" has no AI DNA category — verify this is correct` });
+  }
+
+  // Source attribution check
+  if (!entry.source_name && !entry.source_url) {
+    issues.push({ field: 'source', message: 'No source attribution — add source name or URL' });
+  }
+
+  // Benchmark score validation
+  if (entry.benchmark_score !== null && entry.benchmark_score !== undefined) {
+    if (typeof entry.benchmark_score !== 'number' || isNaN(entry.benchmark_score)) {
+      issues.push({ field: 'benchmark_score', message: 'Benchmark score is not a valid number' });
+    }
+  }
+
+  return { issues, corrections };
 }
 
 export function reviewDraft(entry: SignalEntry): ReviewProposal {
@@ -122,21 +173,62 @@ export function reviewDraft(entry: SignalEntry): ReviewProposal {
     price_input: entry.price_input,
     price_output: entry.price_output,
     result: entry.result,
+    source_name: entry.source_name,
+    source_url: entry.source_url,
   });
 
-  const changes: string[] = [...review.notes];
-  if (review.cleaned_title && review.cleaned_title !== entry.title) {
-    changes.unshift(`Title cleaned: "${entry.title.slice(0, 60)}" → "${review.cleaned_title.slice(0, 60)}"`);
-  }
+  // Status is determined by remaining issues only, not corrections
+  const proposedStatus: ReviewStatus = review.issues.length > 0 ? 'needs_attention' : 'ready_for_review';
+
+  // Build notes from issues only — corrections are applied, not warned about
+  const notes = review.issues.map((i) => i.message);
 
   return {
     id: entry.id,
     title: entry.title,
     type: entry.type,
     current_review_status: entry.review_status || 'not_checked',
-    proposed_review_status: review.status,
-    proposed_review_notes: changes.join('; '),
-    proposed_title: review.cleaned_title !== entry.title ? review.cleaned_title : undefined,
-    changes,
+    proposed_review_status: proposedStatus,
+    proposed_review_notes: notes.join('; ') || null,
+    corrections: review.corrections,
+    issues: review.issues,
+    proposed_title: review.corrections.some((c) => c.field === 'title')
+      ? review.corrections.find((c) => c.field === 'title')!.after
+      : undefined,
   };
+}
+
+// After applying corrections, re-review the updated entry to recalculate status
+export function reReviewAfterApply(
+  entry: SignalEntry,
+  appliedTitle?: string,
+): { status: ReviewStatus; notes: string | null } {
+  const updated = { ...entry };
+  if (appliedTitle) updated.title = appliedTitle;
+
+  const review = reviewEntry({
+    type: updated.type,
+    system_layer: updated.system_layer,
+    title: updated.title,
+    summary: updated.summary,
+    why_it_matters: updated.why_it_matters,
+    how_its_built: updated.how_its_built,
+    business_angle: updated.business_angle,
+    steps: updated.steps,
+    tags: updated.tags,
+    role_tags: updated.role_tags,
+    model_name: updated.model_name,
+    vendor: updated.vendor,
+    benchmark_score: updated.benchmark_score,
+    benchmark_name: updated.benchmark_name,
+    price_input: updated.price_input,
+    price_output: updated.price_output,
+    result: updated.result,
+    source_name: updated.source_name,
+    source_url: updated.source_url,
+  });
+
+  const status: ReviewStatus = review.issues.length > 0 ? 'needs_attention' : 'ready_for_review';
+  const notes = review.issues.map((i) => i.message).join('; ') || null;
+  return { status, notes };
 }
