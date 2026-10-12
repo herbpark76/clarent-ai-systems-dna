@@ -364,8 +364,9 @@ Deno.serve(async (req: Request) => {
     let callerRole: string | null = null;
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
-      // app_metadata.role is embedded in the JWT as a top-level "role" claim
-      callerRole = payload.role ?? payload.app_metadata?.role ?? null;
+      // Supabase JWTs always have payload.role = "authenticated" (the DB role).
+      // The custom admin role lives in app_metadata.role.
+      callerRole = payload.app_metadata?.role ?? null;
     } catch { /* malformed JWT — leave null */ }
 
     if (callerRole !== "admin") {

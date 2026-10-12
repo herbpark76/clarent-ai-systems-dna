@@ -607,6 +607,7 @@ export default function AdminSignalDesk() {
   const [authed, setAuthed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
   const [entries, setEntries] = useState<SignalEntry[]>([]);
   const [modelEntries, setModelEntries] = useState<SignalEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
@@ -626,6 +627,7 @@ export default function AdminSignalDesk() {
       if (data.session) {
         const role = data.session.user.app_metadata?.role;
         setIsAdmin(role === 'admin');
+        setAdminEmail(data.session.user.email || '');
       }
       setAuthChecked(true);
     });
@@ -634,8 +636,10 @@ export default function AdminSignalDesk() {
       if (session) {
         const role = session.user.app_metadata?.role;
         setIsAdmin(role === 'admin');
+        setAdminEmail(session.user.email || '');
       } else {
         setIsAdmin(false);
+        setAdminEmail('');
       }
       setAuthChecked(true);
     });
@@ -971,9 +975,14 @@ export default function AdminSignalDesk() {
               <p className="text-[11px] text-white/35">Turn AI news into learning content</p>
             </div>
           </div>
-          <button onClick={handleSignOut} className="text-xs text-white/40 hover:text-white/70 transition-colors">
-            Sign out
-          </button>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-white/40">
+              Signed in as <span className="text-white/60 font-medium">{adminEmail}</span>
+            </span>
+            <button onClick={handleSignOut} className="text-xs text-white/40 hover:text-white/70 transition-colors">
+              Sign out
+            </button>
+          </div>
         </div>
 
         {/* Process form */}
