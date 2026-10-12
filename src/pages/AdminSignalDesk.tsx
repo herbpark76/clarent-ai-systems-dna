@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
 
 // ── Types ──────────────────────────────────────────────
-type EntryType = 'news' | 'tutorial' | 'use_case' | 'tool' | 'model_release' | 'risk' | 'industry';
+type EntryType = 'news' | 'tutorial' | 'use_case' | 'tool' | 'model_release' | 'risk';
 type SystemLayer = 'model' | 'agent' | 'tools_connectors' | 'data_context' | 'evals' | 'security_governance' | 'interface';
 type DuplicateStatus = 'none' | 'possible' | 'merged' | 'separate' | 'discarded';
 type EntryOrigin = 'newsletter' | 'original';
@@ -54,7 +54,7 @@ interface SignalEntry {
 
 const TYPE_LABELS: Record<EntryType, string> = {
   news: 'News', tutorial: 'Tutorial', use_case: 'Use Case',
-  tool: 'Tool', model_release: 'Model Release', risk: 'Risk', industry: 'Industry',
+  tool: 'Tool', model_release: 'Model Release', risk: 'Risk',
 };
 const LAYER_LABELS: Record<SystemLayer, string> = {
   model: 'Model', agent: 'Agent', tools_connectors: 'Tools & Connectors',
@@ -68,7 +68,6 @@ const TYPE_COLORS: Record<EntryType, string> = {
   tool: 'border-orange-500/30 bg-orange-500/10 text-orange-300',
   model_release: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
   risk: 'border-red-500/30 bg-red-500/10 text-red-300',
-  industry: 'border-slate-400/30 bg-slate-400/10 text-slate-300',
 };
 const LAYER_COLORS: Record<SystemLayer, string> = {
   model: 'text-blue-400', agent: 'text-amber-400',
@@ -346,7 +345,7 @@ function EntryCard({
                 <span className="text-[10px] text-white/40 mb-1 block">System Layer</span>
                 <select value={draft.system_layer || ''} onChange={(e) => setDraft({ ...draft, system_layer: (e.target.value || null) as SystemLayer | null })}
                   className="w-full px-2.5 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500/50">
-                  <option value="" className="bg-[#0f1523]">— None (industry) —</option>
+                  <option value="" className="bg-[#0f1523]">— None (general news) —</option>
                   {Object.entries(LAYER_LABELS).map(([v, l]) => <option key={v} value={v} className="bg-[#0f1523]">{l}</option>)}
                 </select>
               </label>
@@ -726,7 +725,8 @@ export default function AdminSignalDesk() {
         const dupCount = result.duplicate_count ?? 0;
         const total = result.count ?? result.entries?.length ?? 0;
         if (total === 0) {
-          setProcessMsg({ type: 'info', text: 'No valid entries found in the text.' });
+          const msg = result.message || result.validation_errors?.join('; ') || 'No valid entries found in the text.';
+          setProcessMsg({ type: 'info', text: msg });
         } else {
           const parts: string[] = [`${newCount} new`];
           if (dupCount > 0) parts.push(`${dupCount} possible duplicate${dupCount > 1 ? 's' : ''}`);

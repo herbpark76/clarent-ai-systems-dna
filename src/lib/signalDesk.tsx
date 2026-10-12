@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 import NavBar from '../components/NavBar';
 
 // ── Types ──────────────────────────────────────────────
-export type EntryType = 'news' | 'tutorial' | 'use_case' | 'tool' | 'model_release' | 'risk' | 'industry';
+export type EntryType = 'news' | 'tutorial' | 'use_case' | 'tool' | 'model_release' | 'risk';
 export type SystemLayer = 'model' | 'agent' | 'tools_connectors' | 'data_context' | 'evals' | 'security_governance' | 'interface';
 export type DuplicateStatus = 'none' | 'possible' | 'merged' | 'separate' | 'discarded';
 
@@ -48,7 +48,7 @@ export interface SignalEntry {
 
 export const TYPE_LABELS: Record<EntryType, string> = {
   news: 'News', tutorial: 'Tutorial', use_case: 'Use Case',
-  tool: 'Tool', model_release: 'Model Release', risk: 'Risk', industry: 'Industry',
+  tool: 'Tool', model_release: 'Model Release', risk: 'Risk',
 };
 
 export const LAYER_LABELS: Record<SystemLayer, string> = {
@@ -64,7 +64,6 @@ export const TYPE_COLORS: Record<EntryType, string> = {
   tool: 'border-orange-500/30 bg-orange-500/10 text-orange-300',
   model_release: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
   risk: 'border-red-500/30 bg-red-500/10 text-red-300',
-  industry: 'border-slate-400/30 bg-slate-400/10 text-slate-300',
 };
 
 export const LAYER_COLORS: Record<SystemLayer, string> = {

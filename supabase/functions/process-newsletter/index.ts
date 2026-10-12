@@ -61,9 +61,9 @@ CRITICAL RULES:
 - The source is "Clarent Technologies" with today's date and no URL.
 
 FIELDS:
-- type: exactly one of "news", "tutorial", "use_case", "tool", "model_release", "risk", "industry"
+- type: exactly one of "news", "tutorial", "use_case", "tool", "model_release", "risk"
 - system_layer: one of "model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface", or null
-  * General observations with no specific technical layer = type "industry" with system_layer null.
+  * General observations with no specific technical layer = type "news" with system_layer null.
 - title: concise headline in the author's voice
 - summary: 2-4 sentences summarizing the observation or lesson, keeping the author's perspective
 - why_it_matters: 1-2 sentences on why this matters for practitioners
@@ -83,12 +83,12 @@ You receive raw newsletter text and must extract individual AI news items, turni
 INSTRUCTIONS:
 1. Skip sponsored sections, advertisements, partner content, footer boilerplate, unsubscribe links, and promotional blurbs.
 2. For each genuine news item, produce ONE entry with these fields:
-   - type: exactly one of "news", "tutorial", "use_case", "tool", "model_release", "risk", "industry"
+   - type: exactly one of "news", "tutorial", "use_case", "tool", "model_release", "risk"
    - system_layer: one of "model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface", or null
      * "interface" = how people interact with AI (chat, voice, apps, UX, design)
      * Agent products and autonomous AI agents (e.g. Meta's Muse, Devin, agent frameworks) = "agent"
-     * Business, funding, education, or market stories: use the layer they most affect. If there is no clear technical layer, set system_layer to null and use type "industry".
-     * General industry news with no specific system layer = type "industry" with system_layer null.
+     * Business, funding, education, or market stories: use the layer they most affect. If there is no clear technical layer, set system_layer to null and use type "news".
+     * General industry news with no specific system layer = type "news" with system_layer null.
    - title: concise headline (your own wording)
    - summary: 2-4 sentences summarizing the item IN YOUR OWN WORDS. Never copy text from the source.
    - why_it_matters: 1-2 sentences on significance for AI practitioners
@@ -115,7 +115,7 @@ Always capture "Community AI Workflow" and "Roundtable" stories as use_case entr
    - how_its_built: describe the tool and approach used
    - steps: array of { text } objects describing each step of the workflow
 
-3. Sort each item into exactly ONE type — no item gets multiple. system_layer is also singular or null (for industry type).
+3. Sort each item into exactly ONE type — no item gets multiple. system_layer is also singular or null (for news type).
 4. Keep summaries short and rewritten — never paste source text.
 5. If the newsletter contains no genuine AI news items, return an empty array.
 
@@ -130,13 +130,39 @@ When in doubt, do NOT flag as duplicate — only flag when both entries are clea
 You MUST call the save_entries tool with your results. Do not output any text.`;
 
 const VALID_TYPES = new Set([
-  "news", "tutorial", "use_case", "tool", "model_release", "risk", "industry",
+  "news", "tutorial", "use_case", "tool", "model_release", "risk",
 ]);
 const VALID_LAYERS = new Set([
   "model", "agent", "tools_connectors", "data_context",
   "evals", "security_governance", "interface",
 ]);
-const NULLABLE_LAYER_TYPES = new Set(["industry"]);
+const NULLABLE_LAYER_TYPES = new Set(["news"]);
+
+// Aliases that Claude may produce — normalize to the canonical DB enum value.
+const TYPE_ALIASES: Record<string, string> = {
+  industry: "news",
+  breaking: "news",
+  announcement: "news",
+  update: "news",
+  release: "news",
+  product: "tool",
+  feature: "tool",
+  framework: "tool",
+  case_study: "use_case",
+  walkthrough: "tutorial",
+  guide: "tutorial",
+  howto: "tutorial",
+  vulnerability: "risk",
+  security: "risk",
+  compliance: "risk",
+};
+
+function normalizeType(rawType: string): string | null {
+  const t = String(rawType).toLowerCase().trim();
+  if (VALID_TYPES.has(t)) return t;
+  if (TYPE_ALIASES[t]) return TYPE_ALIASES[t];
+  return null;
+}
 
 // ── Slug generation ───────────────────────────────────
 function generateBaseSlug(title: string): string {
@@ -311,14 +337,17 @@ function normalizeSteps(raw: any): Array<{ text: string; prompt?: string }> {
   return [];
 }
 
-function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEntry | null {
+function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): { entry: ProcessedEntry } | { error: string } | null {
   if (!raw.title || !raw.summary) return null;
-  if (!VALID_TYPES.has(raw.type)) return null;
+  const normalizedType = normalizeType(raw.type);
+  if (!normalizedType) {
+    return { error: `Unknown type "${raw.type}" for entry "${String(raw.title).slice(0, 80)}". Valid types: news, tutorial, use_case, tool, model_release, risk.` };
+  }
 
-  // system_layer can be null for industry entries; otherwise must be valid
+  // system_layer can be null for news entries; otherwise must be valid
   const layer = raw.system_layer || null;
   if (layer !== null && !VALID_LAYERS.has(layer)) return null;
-  if (layer === null && !NULLABLE_LAYER_TYPES.has(raw.type)) return null;
+  if (layer === null && !NULLABLE_LAYER_TYPES.has(normalizedType)) return null;
 
   // Validate duplicate_of_id — must be a real recent entry id
   let dupId: string | null = null;
@@ -327,7 +356,8 @@ function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEn
   }
 
   return {
-    type: raw.type,
+    entry: {
+    type: normalizedType,
     system_layer: layer,
     title: String(raw.title).slice(0, 500),
     summary: String(raw.summary).slice(0, 2000),
@@ -346,6 +376,7 @@ function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): ProcessedEn
     source_url: raw.source_url || null,
     duplicate_of_id: dupId,
     duplicate_of_title: dupId ? (raw.duplicate_of_title || null) : null,
+    } satisfies ProcessedEntry,
   };
 }
 
@@ -450,13 +481,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!ANTHROPIC_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "Anthropic API key not configured." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
     // ── Notes mode: draft a single entry from rough notes ──
     if (isNotesMode) {
       if (!text || typeof text !== "string" || text.trim().length < 20) {
@@ -476,7 +500,7 @@ Deno.serve(async (req: Request) => {
         input_schema: {
           type: "object" as const,
           properties: {
-            type: { type: "string", enum: ["news", "tutorial", "use_case", "tool", "model_release", "risk", "industry"] },
+            type: { type: "string", enum: ["news", "tutorial", "use_case", "tool", "model_release", "risk"] },
             system_layer: { type: "string", enum: ["model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface"] },
             title: { type: "string" },
             summary: { type: "string" },
@@ -545,7 +569,14 @@ Deno.serve(async (req: Request) => {
       }
 
       const rawEntry: ProcessedEntry = notesToolUse.input;
-      const cleanEntry = sanitizeEntry(rawEntry, new Set());
+      const result = sanitizeEntry(rawEntry, new Set());
+      if (result && "error" in result) {
+        return new Response(
+          JSON.stringify({ error: result.error }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const cleanEntry = result && "entry" in result ? result.entry : null;
       if (!cleanEntry) {
         return new Response(
           JSON.stringify({ error: "Could not generate a valid entry from these notes. Please add more detail." }),
@@ -597,9 +628,8 @@ Deno.serve(async (req: Request) => {
           sources: [notesSource],
           duplicate_of: null,
           duplicate_status: "none",
-          origin: "original",
           slug: finalSlug,
-          origin: "newsletter",
+          origin: "original",
           status: "draft",
         })
         .select("id, title, type, system_layer, status");
@@ -666,8 +696,8 @@ Deno.serve(async (req: Request) => {
             items: {
               type: "object" as const,
               properties: {
-                type: { type: "string", enum: ["news", "tutorial", "use_case", "tool", "model_release", "risk", "industry"] },
-                system_layer: { type: "string", enum: ["model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface"], description: "The system layer this entry belongs to. Set to null for industry entries with no clear technical layer." },
+                type: { type: "string", enum: ["news", "tutorial", "use_case", "tool", "model_release", "risk"] },
+                system_layer: { type: "string", enum: ["model", "agent", "tools_connectors", "data_context", "evals", "security_governance", "interface"], description: "The system layer this entry belongs to. Set to null for news entries with no clear technical layer." },
                 title: { type: "string" },
                 summary: { type: "string" },
                 why_it_matters: { type: "string" },
@@ -762,13 +792,22 @@ Deno.serve(async (req: Request) => {
     }
 
     const rawEntries: ProcessedEntry[] = Array.isArray(toolUseBlock.input.entries) ? toolUseBlock.input.entries : [];
+    const validationErrors: string[] = [];
     const cleanEntries = rawEntries
-      .map((e) => sanitizeEntry(e, recentIds))
-      .filter((e): e is NonNullable<typeof e> => e !== null);
+      .map((e) => {
+        const r = sanitizeEntry(e, recentIds);
+        if (r && "error" in r) { validationErrors.push(r.error); return null; }
+        if (r && "entry" in r) return r.entry;
+        return null;
+      })
+      .filter((e): e is ProcessedEntry => e !== null);
 
     if (cleanEntries.length === 0) {
+      const msg = validationErrors.length > 0
+        ? `No valid entries extracted. ${validationErrors.length} rejected: ${validationErrors.join("; ")}`
+        : "No valid entries extracted.";
       return new Response(
-        JSON.stringify({ entries: [], message: "No valid entries extracted." }),
+        JSON.stringify({ entries: [], message: msg, validation_errors: validationErrors }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
