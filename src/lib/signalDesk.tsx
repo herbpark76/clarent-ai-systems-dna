@@ -44,6 +44,9 @@ export interface SignalEntry {
   duplicate_status: DuplicateStatus;
   origin: EntryOrigin;
   status: 'draft' | 'published';
+  result: string | null;
+  review_status: string;
+  review_notes: string | null;
 }
 
 export const TYPE_LABELS: Record<EntryType, string> = {

@@ -6,6 +6,7 @@ import {
   Newspaper, AlertCircle, CheckCircle2, ExternalLink,
   Layers, Tag, Briefcase, Building2, ChevronDown, Link2,
   GitMerge, XCircle, Copy, Cpu, Trophy, Plus, FileText, PenLine,
+  AlertTriangle, ScanLine, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -21,6 +22,8 @@ interface SourceObj {
   date: string | null;
   url: string | null;
 }
+
+type ReviewStatus = 'ready_for_review' | 'needs_attention' | 'draft';
 
 interface SignalEntry {
   id: string;
@@ -50,6 +53,9 @@ interface SignalEntry {
   duplicate_status: DuplicateStatus;
   origin: EntryOrigin;
   status: 'draft' | 'published';
+  result: string | null;
+  review_status: ReviewStatus;
+  review_notes: string | null;
 }
 
 const TYPE_LABELS: Record<EntryType, string> = {
@@ -241,6 +247,7 @@ function EntryCard({
       tags: draft.tags, role_tags: draft.role_tags, model_name: draft.model_name,
       vendor: draft.vendor, benchmark_score: draft.benchmark_score, benchmark_name: draft.benchmark_name,
       price_input: draft.price_input, price_output: draft.price_output, source_url: draft.source_url,
+      result: draft.result,
     });
     setEditing(false);
     setSaving(false);
@@ -270,6 +277,17 @@ function EntryCard({
         {isPossibleDup && (
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300">
             Possible duplicate
+          </span>
+        )}
+        {entry.review_status === 'needs_attention' && (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-orange-500/30 bg-orange-500/10 text-orange-300 flex items-center gap-1">
+            <AlertTriangle className="w-2.5 h-2.5" />
+            Needs attention
+          </span>
+        )}
+        {entry.review_status === 'ready_for_review' && (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-green-500/20 bg-green-500/5 text-green-400/70">
+            Ready
           </span>
         )}
         <span className="text-[10px] text-white/25 ml-auto">
@@ -356,6 +374,10 @@ function EntryCard({
               className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50 resize-y" />
             <textarea value={draft.business_angle || ''} onChange={(e) => setDraft({ ...draft, business_angle: e.target.value })} placeholder="Business angle (finance/tax/ERP)" rows={2}
               className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50 resize-y" />
+            {draft.type === 'use_case' && (
+              <textarea value={draft.result || ''} onChange={(e) => setDraft({ ...draft, result: e.target.value })} placeholder="Result (what happened when this was applied)" rows={2}
+                className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50 resize-y" />
+            )}
             <input value={(draft.tags || []).join(', ')} onChange={(e) => setDraft({ ...draft, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="Tags (comma separated)"
               className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50" />
             <input value={(draft.role_tags || []).join(', ')} onChange={(e) => setDraft({ ...draft, role_tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="Role tags (finance, legal, ops, marketing, IT)"
@@ -420,6 +442,20 @@ function EntryCard({
                         </li>
                       ))}
                     </ol>
+                  </div>
+                )}
+                {entry.result && (
+                  <div>
+                    <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wide">Result</span>
+                    <p className="text-xs text-white/55 leading-relaxed mt-0.5">{entry.result}</p>
+                  </div>
+                )}
+                {entry.review_notes && (
+                  <div className="px-2.5 py-2 rounded-lg bg-orange-500/[0.06] border border-orange-500/15">
+                    <span className="text-[10px] font-semibold text-orange-300/80 uppercase tracking-wide flex items-center gap-1">
+                      <AlertTriangle className="w-2.5 h-2.5" /> Review notes
+                    </span>
+                    <p className="text-xs text-orange-200/60 leading-relaxed mt-0.5">{entry.review_notes}</p>
                   </div>
                 )}
                 {entry.model_name && (
@@ -600,6 +636,113 @@ function ModelTrackerGroups({ entries }: { entries: SignalEntry[] }) {
   );
 }
 
+// ── Recheck Modal ──────────────────────────────────────
+function RecheckModal({
+  proposals,
+  onClose,
+  onApply,
+}: {
+  proposals: Array<{ id: string; title: string; type: string; current_review_status: string | null; proposed_review_status: string; proposed_review_notes: string; proposed_title?: string; changes: string[] }>;
+  onClose: () => void;
+  onApply: (selectedIds: string[]) => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(proposals.map((p) => p.id)));
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-2xl border border-white/10 bg-[#0c1220] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.08]">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <ScanLine className="w-4 h-4 text-cyan-400" />
+            Proposed Quality Review Changes
+          </h3>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4 space-y-3">
+          <p className="text-xs text-white/40 leading-relaxed">
+            Review the proposed changes below. Select which entries to update. Manual edits you made will be preserved unless the title is being cleaned.
+          </p>
+          {proposals.map((p) => {
+            const isSelected = selected.has(p.id);
+            return (
+              <div key={p.id} className={`rounded-lg border p-3 transition-all ${
+                isSelected ? 'border-cyan-500/30 bg-cyan-500/[0.04]' : 'border-white/[0.06] bg-white/[0.01]'
+              }`}>
+                <div className="flex items-start gap-2.5">
+                  <button onClick={() => toggle(p.id)} className="mt-0.5 flex-shrink-0">
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                      isSelected ? 'border-cyan-400 bg-cyan-500/20' : 'border-white/20'
+                    }`}>
+                      {isSelected && <CheckCircle2 className="w-3 h-3 text-cyan-300" />}
+                    </div>
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-white leading-snug">{p.title}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] text-white/30">{(p.current_review_status || 'none').replace(/_/g, ' ')}</span>
+                      <span className="text-[10px] text-white/20">→</span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                        p.proposed_review_status === 'needs_attention'
+                          ? 'bg-orange-500/15 text-orange-300'
+                          : 'bg-green-500/15 text-green-300'
+                      }`}>
+                        {p.proposed_review_status.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    {p.proposed_title && (
+                      <div className="mt-2 px-2 py-1.5 rounded bg-white/[0.04] border border-white/[0.06]">
+                        <span className="text-[9px] text-white/30 uppercase tracking-wide">Title clean</span>
+                        <p className="text-[11px] text-cyan-300/80 mt-0.5">{p.proposed_title}</p>
+                      </div>
+                    )}
+                    {p.changes.length > 0 && (
+                      <ul className="mt-2 space-y-0.5">
+                        {p.changes.map((n, i) => (
+                          <li key={i} className="text-[11px] text-orange-200/60 leading-relaxed flex items-start gap-1">
+                            <AlertTriangle className="w-2.5 h-2.5 text-orange-400/50 flex-shrink-0 mt-0.5" />
+                            {n}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.08]">
+          <span className="text-[10px] text-white/35">
+            {selected.size} of {proposals.length} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">
+              Cancel
+            </button>
+            <button
+              onClick={() => onApply(Array.from(selected))}
+              disabled={selected.size === 0}
+              className="px-3 py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/30 disabled:opacity-40 transition-all">
+              Apply {selected.size > 0 ? `(${selected.size})` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────
 export default function AdminSignalDesk() {
   const navigate = useNavigate();
@@ -619,6 +762,9 @@ export default function AdminSignalDesk() {
   const [processMsg, setProcessMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [notesText, setNotesText] = useState('');
   const [notesProcessing, setNotesProcessing] = useState(false);
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'needs_attention' | 'ready_for_review'>('all');
+  const [recheckLoading, setRecheckLoading] = useState(false);
+  const [recheckProposals, setRecheckProposals] = useState<Array<{ id: string; title: string; type: string; current_review_status: string | null; proposed_review_status: string; proposed_review_notes: string; proposed_title?: string; changes: string[] }> | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -723,6 +869,7 @@ export default function AdminSignalDesk() {
       } else {
         const newCount = result.new_count ?? 0;
         const dupCount = result.duplicate_count ?? 0;
+        const needsAttn = result.needs_attention_count ?? 0;
         const total = result.count ?? result.entries?.length ?? 0;
         if (total === 0) {
           const msg = result.message || result.validation_errors?.join('; ') || 'No valid entries found in the text.';
@@ -730,6 +877,7 @@ export default function AdminSignalDesk() {
         } else {
           const parts: string[] = [`${newCount} new`];
           if (dupCount > 0) parts.push(`${dupCount} possible duplicate${dupCount > 1 ? 's' : ''}`);
+          if (needsAttn > 0) parts.push(`${needsAttn} need${needsAttn > 1 ? '' : 's'} attention`);
           setProcessMsg({ type: 'success', text: `${parts.join(', ')} entries saved as drafts.` });
         }
         setProcessText('');
@@ -783,6 +931,90 @@ export default function AdminSignalDesk() {
     setNotesProcessing(false);
   };
 
+  const handleRecheck = async () => {
+    setRecheckLoading(true);
+    setProcessMsg(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setProcessMsg({ type: 'error', text: 'Not authenticated.' });
+        setRecheckLoading(false);
+        return;
+      }
+      const funcUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-newsletter`;
+      const resp = await fetch(funcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ mode: 'recheck' }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        setProcessMsg({ type: 'error', text: result.error || `Request failed (${resp.status})` });
+      } else {
+        const proposals = result.proposals || [];
+        if (proposals.length === 0) {
+          setProcessMsg({ type: 'info', text: 'No quality issues found in current drafts.' });
+        } else {
+          setRecheckProposals(proposals);
+        }
+      }
+    } catch {
+      setProcessMsg({ type: 'error', text: 'Network error during recheck.' });
+    }
+    setRecheckLoading(false);
+  };
+
+  const handleApplyRecheck = async (selectedIds: string[]) => {
+    const proposals = recheckProposals || [];
+    const toApply = proposals.filter((p) => selectedIds.includes(p.id));
+    if (toApply.length === 0) {
+      setRecheckProposals(null);
+      return;
+    }
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setProcessMsg({ type: 'error', text: 'Not authenticated.' });
+        return;
+      }
+      const funcUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-newsletter`;
+      const resp = await fetch(funcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          mode: 'apply_recheck',
+          updates: toApply.map((p) => ({
+            id: p.id,
+            review_status: p.proposed_review_status,
+            review_notes: p.proposed_review_notes || null,
+            title: p.proposed_title || undefined,
+          })),
+        }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        setProcessMsg({ type: 'error', text: result.error || `Apply failed (${resp.status})` });
+      } else {
+        const applied = result.applied ?? toApply.length;
+        setProcessMsg({ type: 'success', text: `Applied quality review updates to ${applied} entr${applied === 1 ? 'y' : 'ies'}.` });
+        setRecheckProposals(null);
+        loadEntries();
+      }
+    } catch {
+      setProcessMsg({ type: 'error', text: 'Network error applying recheck.' });
+    }
+  };
+
   const handleCreateBlankEntry = async () => {
     setProcessMsg(null);
     try {
@@ -817,6 +1049,7 @@ export default function AdminSignalDesk() {
           duplicate_status: 'none',
           slug: tempSlug,
           status: 'draft',
+          review_status: 'ready_for_review',
         })
         .select('id');
       if (error) {
@@ -958,6 +1191,8 @@ export default function AdminSignalDesk() {
   // Separate drafts and possible duplicates
   const normalDrafts = entries.filter((e) => e.duplicate_status !== 'possible');
   const possibleDups = entries.filter((e) => e.duplicate_status === 'possible');
+  const needsAttentionCount = normalDrafts.filter((e) => e.review_status === 'needs_attention').length;
+  const filteredDrafts = reviewFilter === 'all' ? normalDrafts : normalDrafts.filter((e) => e.review_status === reviewFilter);
 
   return (
     <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
@@ -1079,14 +1314,42 @@ export default function AdminSignalDesk() {
 
             {/* Normal drafts */}
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-bold text-white/60 flex items-center gap-2">
-                <RefreshCw className="w-3.5 h-3.5 text-white/40" />
-                Drafts
-                <span className="text-[10px] text-white/30 font-normal">({normalDrafts.length})</span>
-              </h3>
-              <button onClick={loadEntries} className="text-[10px] text-white/40 hover:text-white/70 transition-colors flex items-center gap-1">
-                <RefreshCw className="w-3 h-3" /> Refresh
-              </button>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-white/60 flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 text-white/40" />
+                  Drafts
+                  <span className="text-[10px] text-white/30 font-normal">({normalDrafts.length})</span>
+                </h3>
+                {/* Filter pills */}
+                <div className="flex items-center gap-1 ml-2">
+                  {(['all', 'needs_attention', 'ready_for_review'] as const).map((f) => {
+                    const label = f === 'all' ? 'All' : f === 'needs_attention' ? 'Needs attention' : 'Ready';
+                    const count = f === 'all' ? normalDrafts.length : normalDrafts.filter((e) => e.review_status === f).length;
+                    return (
+                      <button key={f} onClick={() => setReviewFilter(f)}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all ${
+                          reviewFilter === f
+                            ? f === 'needs_attention' ? 'border-orange-500/40 bg-orange-500/15 text-orange-300'
+                              : f === 'ready_for_review' ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                              : 'border-white/20 bg-white/[0.08] text-white/70'
+                            : 'border-white/10 text-white/35 hover:text-white/60'
+                        }`}>
+                        {label}{count > 0 && f !== 'all' ? ` ${count}` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={handleRecheck} disabled={recheckLoading || normalDrafts.length === 0}
+                  className="text-[10px] text-white/40 hover:text-white/70 transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
+                  {recheckLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ScanLine className="w-3 h-3" />}
+                  Recheck drafts
+                </button>
+                <button onClick={loadEntries} className="text-[10px] text-white/40 hover:text-white/70 transition-colors flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3" /> Refresh
+                </button>
+              </div>
             </div>
 
             {loadingEntries ? (
@@ -1098,11 +1361,13 @@ export default function AdminSignalDesk() {
                 <Newspaper className="w-8 h-8 text-white/15 mx-auto mb-3" />
                 <p className="text-sm text-white/30">No drafts to review. Process a newsletter to get started.</p>
               </div>
-            ) : normalDrafts.length === 0 ? (
-              <p className="text-xs text-white/30 text-center py-6">No non-duplicate drafts. All items flagged as possible duplicates above.</p>
+            ) : filteredDrafts.length === 0 ? (
+              <p className="text-xs text-white/30 text-center py-6">
+                {reviewFilter === 'needs_attention' ? 'No drafts need attention. All clear!' : reviewFilter === 'ready_for_review' ? 'No drafts are ready for review yet.' : 'No non-duplicate drafts.'}
+              </p>
             ) : (
               <div className="space-y-3">
-                {normalDrafts.map((entry) => (
+                {filteredDrafts.map((entry) => (
                   <div key={entry.id}>
                     <EntryCardBoundary entryTitle={entry.title}>
                     <EntryCard entry={entry} onUpdate={handleUpdate} onDelete={handleDelete}
@@ -1214,6 +1479,15 @@ export default function AdminSignalDesk() {
           </Link>
         </div>
       </div>
+
+      {/* Recheck modal */}
+      {recheckProposals && recheckProposals.length > 0 && (
+        <RecheckModal
+          proposals={recheckProposals}
+          onClose={() => setRecheckProposals(null)}
+          onApply={handleApplyRecheck}
+        />
+      )}
     </div>
   );
 }

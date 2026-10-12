@@ -265,6 +265,14 @@ function EntryDetailInner() {
           </div>
         )}
 
+        {/* Result (for use cases) */}
+        {entry.result && (
+          <div className="mb-5 p-4 rounded-xl border border-white/[0.06] bg-white/[0.02]">
+            <h2 className="text-xs font-bold text-white/40 uppercase tracking-wide mb-2">Result</h2>
+            <p className="text-sm text-white/60 leading-relaxed">{entry.result}</p>
+          </div>
+        )}
+
         {/* Model details */}
         {(entry.model_name || entry.vendor || entry.benchmark_score != null || entry.price_input || entry.price_output) && (
           <div className="mb-5 p-4 rounded-xl border border-white/[0.06] bg-white/[0.02]">
