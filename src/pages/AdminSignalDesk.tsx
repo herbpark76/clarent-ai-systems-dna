@@ -6,9 +6,10 @@ import {
   Newspaper, AlertCircle, CheckCircle2, ExternalLink,
   Layers, Tag, Briefcase, Building2, ChevronDown, Link2,
   GitMerge, XCircle, Copy, Cpu, Trophy, Plus, FileText, PenLine,
-  AlertTriangle, ScanLine, X,
+  AlertTriangle, ScanLine, X, RotateCw,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { reviewDraft, type ReviewProposal } from '../lib/qualityReview';
 import NavBar from '../components/NavBar';
 
 // ── Types ──────────────────────────────────────────────
@@ -23,7 +24,7 @@ interface SourceObj {
   url: string | null;
 }
 
-type ReviewStatus = 'ready_for_review' | 'needs_attention' | 'draft';
+type ReviewStatus = 'ready_for_review' | 'needs_attention' | 'not_checked';
 
 interface SignalEntry {
   id: string;
@@ -288,6 +289,11 @@ function EntryCard({
         {entry.review_status === 'ready_for_review' && (
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-green-500/20 bg-green-500/5 text-green-400/70">
             Ready
+          </span>
+        )}
+        {(!entry.review_status || entry.review_status === 'not_checked') && (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-white/10 bg-white/[0.03] text-white/40">
+            Not checked
           </span>
         )}
         <span className="text-[10px] text-white/25 ml-auto">
@@ -642,7 +648,7 @@ function RecheckModal({
   onClose,
   onApply,
 }: {
-  proposals: Array<{ id: string; title: string; type: string; current_review_status: string | null; proposed_review_status: string; proposed_review_notes: string; proposed_title?: string; changes: string[] }>;
+  proposals: ReviewProposal[];
   onClose: () => void;
   onApply: (selectedIds: string[]) => void;
 }) {
@@ -762,9 +768,11 @@ export default function AdminSignalDesk() {
   const [processMsg, setProcessMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [notesText, setNotesText] = useState('');
   const [notesProcessing, setNotesProcessing] = useState(false);
-  const [reviewFilter, setReviewFilter] = useState<'all' | 'needs_attention' | 'ready_for_review'>('all');
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'needs_attention' | 'ready_for_review' | 'not_checked'>('all');
   const [recheckLoading, setRecheckLoading] = useState(false);
-  const [recheckProposals, setRecheckProposals] = useState<Array<{ id: string; title: string; type: string; current_review_status: string | null; proposed_review_status: string; proposed_review_notes: string; proposed_title?: string; changes: string[] }> | null>(null);
+  const [recheckProgress, setRecheckProgress] = useState<{ done: number; total: number } | null>(null);
+  const [recheckMsg, setRecheckMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [recheckProposals, setRecheckProposals] = useState<ReviewProposal[] | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -932,41 +940,34 @@ export default function AdminSignalDesk() {
   };
 
   const handleRecheck = async () => {
+    if (normalDrafts.length === 0) return;
     setRecheckLoading(true);
-    setProcessMsg(null);
+    setRecheckMsg(null);
+    setRecheckProgress({ done: 0, total: normalDrafts.length });
+
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) {
-        setProcessMsg({ type: 'error', text: 'Not authenticated.' });
-        setRecheckLoading(false);
-        return;
-      }
-      const funcUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-newsletter`;
-      const resp = await fetch(funcUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ mode: 'recheck' }),
-      });
-      const result = await resp.json();
-      if (!resp.ok) {
-        setProcessMsg({ type: 'error', text: result.error || `Request failed (${resp.status})` });
-      } else {
-        const proposals = result.proposals || [];
-        if (proposals.length === 0) {
-          setProcessMsg({ type: 'info', text: 'No quality issues found in current drafts.' });
-        } else {
-          setRecheckProposals(proposals);
+      const proposals: ReviewProposal[] = [];
+      const BATCH = 3;
+      for (let i = 0; i < normalDrafts.length; i += BATCH) {
+        const batch = normalDrafts.slice(i, i + BATCH);
+        for (const entry of batch) {
+          proposals.push(reviewDraft(entry));
         }
+        setRecheckProgress({ done: Math.min(i + BATCH, normalDrafts.length), total: normalDrafts.length });
+        await new Promise((r) => setTimeout(r, 50));
       }
-    } catch {
-      setProcessMsg({ type: 'error', text: 'Network error during recheck.' });
+
+      const withChanges = proposals.filter((p) => p.changes.length > 0);
+      if (withChanges.length === 0) {
+        setRecheckMsg({ type: 'info', text: 'No quality issues found — all drafts look good.' });
+      } else {
+        setRecheckProposals(withChanges);
+      }
+    } catch (err) {
+      setRecheckMsg({ type: 'error', text: `Recheck failed: ${(err as Error)?.message || 'Unknown error'}` });
     }
     setRecheckLoading(false);
+    setRecheckProgress(null);
   };
 
   const handleApplyRecheck = async (selectedIds: string[]) => {
@@ -976,42 +977,41 @@ export default function AdminSignalDesk() {
       setRecheckProposals(null);
       return;
     }
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) {
-        setProcessMsg({ type: 'error', text: 'Not authenticated.' });
-        return;
-      }
-      const funcUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-newsletter`;
-      const resp = await fetch(funcUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          mode: 'apply_recheck',
-          updates: toApply.map((p) => ({
-            id: p.id,
-            review_status: p.proposed_review_status,
-            review_notes: p.proposed_review_notes || null,
-            title: p.proposed_title || undefined,
-          })),
-        }),
-      });
-      const result = await resp.json();
-      if (!resp.ok) {
-        setProcessMsg({ type: 'error', text: result.error || `Apply failed (${resp.status})` });
+
+    setRecheckMsg(null);
+    let applied = 0;
+    let failed = 0;
+    const failedIds: string[] = [];
+
+    for (const p of toApply) {
+      const patch: Partial<SignalEntry> = {
+        review_status: p.proposed_review_status as ReviewStatus,
+        review_notes: p.proposed_review_notes || null,
+      };
+      if (p.proposed_title) patch.title = p.proposed_title;
+
+      const { error } = await supabase.from('signal_desk_entries').update(patch).eq('id', p.id);
+      if (error) {
+        failed++;
+        failedIds.push(p.id);
       } else {
-        const applied = result.applied ?? toApply.length;
-        setProcessMsg({ type: 'success', text: `Applied quality review updates to ${applied} entr${applied === 1 ? 'y' : 'ies'}.` });
-        setRecheckProposals(null);
-        loadEntries();
+        applied++;
+        setEntries((prev) => prev.map((e) =>
+          e.id === p.id ? { ...e, ...patch } : e
+        ));
       }
-    } catch {
-      setProcessMsg({ type: 'error', text: 'Network error applying recheck.' });
+    }
+
+    if (failed > 0) {
+      setRecheckMsg({ type: 'error', text: `${applied} updated, ${failed} failed. Click Recheck again to retry the ${failed} that failed.` });
+      if (applied === 0) {
+        setRecheckProposals((prev) => prev?.filter((p) => failedIds.includes(p.id)) || null);
+      } else {
+        setRecheckProposals((prev) => prev?.filter((p) => failedIds.includes(p.id)) || null);
+      }
+    } else {
+      setRecheckMsg({ type: 'success', text: `Applied quality review updates to ${applied} entr${applied === 1 ? 'y' : 'ies'}.` });
+      setRecheckProposals(null);
     }
   };
 
@@ -1049,7 +1049,7 @@ export default function AdminSignalDesk() {
           duplicate_status: 'none',
           slug: tempSlug,
           status: 'draft',
-          review_status: 'ready_for_review',
+          review_status: 'not_checked',
         })
         .select('id');
       if (error) {
@@ -1192,7 +1192,9 @@ export default function AdminSignalDesk() {
   const normalDrafts = entries.filter((e) => e.duplicate_status !== 'possible');
   const possibleDups = entries.filter((e) => e.duplicate_status === 'possible');
   const needsAttentionCount = normalDrafts.filter((e) => e.review_status === 'needs_attention').length;
-  const filteredDrafts = reviewFilter === 'all' ? normalDrafts : normalDrafts.filter((e) => e.review_status === reviewFilter);
+  const filteredDrafts = reviewFilter === 'all' ? normalDrafts
+    : reviewFilter === 'not_checked' ? normalDrafts.filter((e) => !e.review_status || e.review_status === 'not_checked')
+    : normalDrafts.filter((e) => e.review_status === reviewFilter);
 
   return (
     <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
@@ -1322,15 +1324,16 @@ export default function AdminSignalDesk() {
                 </h3>
                 {/* Filter pills */}
                 <div className="flex items-center gap-1 ml-2">
-                  {(['all', 'needs_attention', 'ready_for_review'] as const).map((f) => {
-                    const label = f === 'all' ? 'All' : f === 'needs_attention' ? 'Needs attention' : 'Ready';
-                    const count = f === 'all' ? normalDrafts.length : normalDrafts.filter((e) => e.review_status === f).length;
+                  {(['all', 'needs_attention', 'ready_for_review', 'not_checked'] as const).map((f) => {
+                    const label = f === 'all' ? 'All' : f === 'needs_attention' ? 'Needs attention' : f === 'ready_for_review' ? 'Ready' : 'Not checked';
+                    const count = f === 'all' ? normalDrafts.length : normalDrafts.filter((e) => e.review_status === f || (!e.review_status && f === 'not_checked')).length;
                     return (
                       <button key={f} onClick={() => setReviewFilter(f)}
                         className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all ${
                           reviewFilter === f
                             ? f === 'needs_attention' ? 'border-orange-500/40 bg-orange-500/15 text-orange-300'
                               : f === 'ready_for_review' ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                              : f === 'not_checked' ? 'border-white/20 bg-white/[0.08] text-white/60'
                               : 'border-white/20 bg-white/[0.08] text-white/70'
                             : 'border-white/10 text-white/35 hover:text-white/60'
                         }`}>
@@ -1341,11 +1344,28 @@ export default function AdminSignalDesk() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={handleRecheck} disabled={recheckLoading || normalDrafts.length === 0}
-                  className="text-[10px] text-white/40 hover:text-white/70 transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
-                  {recheckLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ScanLine className="w-3 h-3" />}
-                  Recheck drafts
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleRecheck} disabled={recheckLoading || normalDrafts.length === 0}
+                    className="text-[10px] text-white/40 hover:text-white/70 transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
+                    {recheckLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ScanLine className="w-3 h-3" />}
+                    Recheck drafts
+                  </button>
+                  {recheckProgress && (
+                    <span className="text-[10px] text-white/30">
+                      {recheckProgress.done}/{recheckProgress.total}
+                    </span>
+                  )}
+                  {recheckMsg && (
+                    <span className={`flex items-center gap-1 text-[10px] ${
+                      recheckMsg.type === 'success' ? 'text-green-400'
+                      : recheckMsg.type === 'error' ? 'text-red-400' : 'text-white/50'
+                    }`}>
+                      {recheckMsg.type === 'success' ? <CheckCircle2 className="w-3 h-3" />
+                       : recheckMsg.type === 'error' ? <AlertCircle className="w-3 h-3" /> : null}
+                      {recheckMsg.text}
+                    </span>
+                  )}
+                </div>
                 <button onClick={loadEntries} className="text-[10px] text-white/40 hover:text-white/70 transition-colors flex items-center gap-1">
                   <RefreshCw className="w-3 h-3" /> Refresh
                 </button>
@@ -1363,7 +1383,7 @@ export default function AdminSignalDesk() {
               </div>
             ) : filteredDrafts.length === 0 ? (
               <p className="text-xs text-white/30 text-center py-6">
-                {reviewFilter === 'needs_attention' ? 'No drafts need attention. All clear!' : reviewFilter === 'ready_for_review' ? 'No drafts are ready for review yet.' : 'No non-duplicate drafts.'}
+                {reviewFilter === 'needs_attention' ? 'No drafts need attention. All clear!' : reviewFilter === 'ready_for_review' ? 'No drafts are ready for review yet.' : reviewFilter === 'not_checked' ? 'No unchecked drafts.' : 'No non-duplicate drafts.'}
               </p>
             ) : (
               <div className="space-y-3">
