@@ -576,6 +576,175 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ applied, total: updates.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // ── Repair mode: fetch source, find outcome for incomplete use_case entries ──
+    if (mode === "repair") {
+      const { entry_ids } = body;
+      if (!Array.isArray(entry_ids) || entry_ids.length === 0) {
+        return new Response(JSON.stringify({ error: "Missing entry_ids array." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { data: repairEntries, error: fetchError } = await supabase
+        .from("signal_desk_entries")
+        .select("id, title, type, summary, how_its_built, result, source_url, source_name, steps")
+        .in("id", entry_ids)
+        .eq("status", "draft");
+
+      if (fetchError) {
+        return new Response(JSON.stringify({ error: `Failed to load entries: ${fetchError.message}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const proposals: Array<{
+        id: string;
+        title: string;
+        found: boolean;
+        proposed_result: string | null;
+        explanation: string;
+      }> = [];
+
+      for (const entry of (repairEntries || [])) {
+        if (entry.type !== "use_case") {
+          proposals.push({
+            id: entry.id,
+            title: entry.title,
+            found: false,
+            proposed_result: null,
+            explanation: "Repair only applies to use_case entries.",
+          });
+          continue;
+        }
+
+        // Try to get source text
+        let sourceText = "";
+        const sourceUrl = entry.source_url;
+
+        if (sourceUrl) {
+          try {
+            const fetchResp = await fetch(sourceUrl, {
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; SignalDesk/1.0; +https://aisystems.clarenttech.com)", "Accept": "text/html,application/xhtml+xml" },
+              redirect: "follow",
+            });
+            if (fetchResp.ok) {
+              const html = await fetchResp.text();
+              sourceText = extractReadableText(html);
+            }
+          } catch { /* fetch failed, sourceText stays empty */ }
+        }
+
+        if (!sourceText || sourceText.trim().length < 200) {
+          proposals.push({
+            id: entry.id,
+            title: entry.title,
+            found: false,
+            proposed_result: null,
+            explanation: sourceUrl
+              ? "Could not retrieve source content from the saved URL."
+              : "No source URL saved for this entry.",
+          });
+          continue;
+        }
+
+        // Use Claude to find the outcome from the source text
+        if (!ANTHROPIC_API_KEY) {
+          proposals.push({
+            id: entry.id,
+            title: entry.title,
+            found: false,
+            proposed_result: null,
+            explanation: "Anthropic API key not configured.",
+          });
+          continue;
+        }
+
+        const repairPrompt = `You are reviewing a newsletter article to find the OUTCOME or RESULT of a specific use case.
+
+ENTRY TITLE: ${entry.title}
+ENTRY SUMMARY: ${entry.summary || ""}
+HOW IT'S BUILT: ${entry.how_its_built || ""}
+
+NEWSLETTER SOURCE TEXT:
+${sourceText.slice(0, 12000)}
+
+TASK:
+Find the explicit outcome or result that was achieved in this use case. This is the "what happened as a result" — not the intended goal or benefit, but what actually occurred.
+
+RULES:
+- Accept qualitative outcomes (e.g., "the reminders worked reliably", "the app produced the intended artistic pairings"). Measurable savings or performance figures are NOT required.
+- Do NOT turn an intended benefit into an achieved result. If the source only says "this could save time" or "this aims to improve X", that is NOT an outcome.
+- Do NOT invent or fabricate details not present in the source text.
+- If the source text does not describe an explicit outcome, say so clearly.
+
+You MUST call the report_result tool with your finding.`;
+
+        const repairTools = [{
+          name: "report_result",
+          description: "Report whether an explicit outcome was found in the source text.",
+          input_schema: {
+            type: "object" as const,
+            properties: {
+              found: { type: "boolean" as const, description: "Whether an explicit outcome/result was found in the source." },
+              result: { type: "string" as const, description: "The outcome text if found, in 1-2 sentences. Null if not found." },
+              explanation: { type: "string" as const, description: "Brief explanation of why an outcome was or was not found." },
+            },
+            required: ["found", "explanation"] as const,
+          },
+        }];
+
+        try {
+          const claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+            body: JSON.stringify({
+              model: CLAUDE_MODEL, max_tokens: 2000, system: repairPrompt,
+              tools: repairTools, tool_choice: { type: "tool", name: "report_result" },
+              messages: [{ role: "user", content: "Find the outcome for this use case." }],
+            }),
+          });
+
+          if (!claudeResp.ok) {
+            proposals.push({
+              id: entry.id,
+              title: entry.title,
+              found: false,
+              proposed_result: null,
+              explanation: `Claude API error (${claudeResp.status}).`,
+            });
+            continue;
+          }
+
+          const claudeData = await claudeResp.json();
+          const toolUse = (claudeData?.content ?? []).find((b: any) => b.type === "tool_use" && b.name === "report_result");
+
+          if (toolUse?.input) {
+            proposals.push({
+              id: entry.id,
+              title: entry.title,
+              found: !!toolUse.input.found,
+              proposed_result: toolUse.input.found ? String(toolUse.input.result || "").trim() || null : null,
+              explanation: String(toolUse.input.explanation || ""),
+            });
+          } else {
+            proposals.push({
+              id: entry.id,
+              title: entry.title,
+              found: false,
+              proposed_result: null,
+              explanation: "Claude did not return a structured result.",
+            });
+          }
+        } catch {
+          proposals.push({
+            id: entry.id,
+            title: entry.title,
+            found: false,
+            proposed_result: null,
+            explanation: "Error calling Claude API for repair.",
+          });
+        }
+      }
+
+      return new Response(JSON.stringify({ proposals }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ── Determine input text ────────────────────────────
     let inputText = "";
     let cleanedUrl: string | null = null;

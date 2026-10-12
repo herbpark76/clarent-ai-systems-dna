@@ -6,7 +6,7 @@ import {
   Newspaper, AlertCircle, CheckCircle2, ExternalLink,
   Layers, Tag, Briefcase, Building2, ChevronDown, Link2,
   GitMerge, XCircle, Copy, Cpu, Trophy, Plus, FileText, PenLine,
-  AlertTriangle, ScanLine, X,
+  AlertTriangle, ScanLine, X, Wrench,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { reviewDraft, reReviewAfterApply, type ReviewProposal, type ReviewSummary } from '../lib/qualityReview';
@@ -653,6 +653,8 @@ function RecheckModal({
   onApply: (selectedIds: string[]) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set(proposals.map((p) => p.id)));
+  const hasCorrections = proposals.some((p) => p.corrections.length > 0);
+  const correctionsCount = proposals.filter((p) => p.corrections.length > 0 && selected.has(p.id)).length;
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -753,17 +755,135 @@ function RecheckModal({
         </div>
         <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.08]">
           <span className="text-[10px] text-white/35">
-            {selected.size} of {proposals.length} selected — only corrections will be applied
+            {hasCorrections
+              ? `${correctionsCount} correction${correctionsCount === 1 ? '' : 's'} to apply`
+              : 'No corrections to apply — review issues and close'}
           </span>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-3 py-1.5 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">
-              Cancel
+              Close
             </button>
             <button
               onClick={() => onApply(Array.from(selected))}
-              disabled={selected.size === 0}
+              disabled={!hasCorrections || correctionsCount === 0}
               className="px-3 py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/30 disabled:opacity-40 transition-all">
-              Apply corrections {selected.size > 0 ? `(${selected.size})` : ''}
+              Apply corrections {correctionsCount > 0 ? `(${correctionsCount})` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Repair Modal ───────────────────────────────────────
+interface RepairProposal {
+  id: string;
+  title: string;
+  found: boolean;
+  proposed_result: string | null;
+  explanation: string;
+}
+
+function RepairModal({
+  proposals,
+  onClose,
+  onApply,
+}: {
+  proposals: RepairProposal[];
+  onClose: () => void;
+  onApply: (selectedIds: string[], results: Map<string, string>) => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(proposals.filter((p) => p.found).map((p) => p.id))
+  );
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const foundCount = proposals.filter((p) => p.found).length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-2xl border border-white/10 bg-[#0c1220] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.08]">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Wrench className="w-4 h-4 text-amber-400" />
+            Source-Based Repair Results
+          </h3>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4 space-y-3">
+          <p className="text-xs text-white/40 leading-relaxed">
+            Each entry was checked against its source newsletter for an explicit outcome. Select entries with found results to fill the result field. Entries with no outcome found will remain Needs attention.
+          </p>
+          {proposals.map((p) => {
+            const isSelected = selected.has(p.id);
+            const canSelect = p.found && p.proposed_result;
+            return (
+              <div key={p.id} className={`rounded-lg border p-3 transition-all ${
+                isSelected ? 'border-amber-500/30 bg-amber-500/[0.04]' : 'border-white/[0.06] bg-white/[0.01]'
+              }`}>
+                <div className="flex items-start gap-2.5">
+                  <button onClick={() => canSelect && toggle(p.id)} className="mt-0.5 flex-shrink-0" disabled={!canSelect}>
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                      isSelected ? 'border-amber-400 bg-amber-500/20' : canSelect ? 'border-white/20' : 'border-white/10 opacity-30'
+                    }`}>
+                      {isSelected && <CheckCircle2 className="w-3 h-3 text-amber-300" />}
+                    </div>
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-white leading-snug">{p.title}</p>
+                    {p.found && p.proposed_result ? (
+                      <div className="mt-2 px-2 py-1.5 rounded bg-amber-500/[0.06] border border-amber-500/15">
+                        <span className="text-[9px] text-amber-400/60 uppercase tracking-wide">Proposed result</span>
+                        <p className="text-[11px] text-amber-200/80 mt-0.5 leading-relaxed">{p.proposed_result}</p>
+                        <p className="text-[10px] text-white/30 mt-1">{p.explanation}</p>
+                      </div>
+                    ) : (
+                      <div className="mt-2 px-2 py-1.5 rounded bg-orange-500/[0.06] border border-orange-500/15">
+                        <div className="flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-orange-400/60" />
+                          <span className="text-[11px] text-orange-300/70 font-medium">No outcome found in source</span>
+                        </div>
+                        <p className="text-[10px] text-white/30 mt-1">{p.explanation}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.08]">
+          <span className="text-[10px] text-white/35">
+            {foundCount} outcome{foundCount === 1 ? '' : 's'} found · {selected.size} selected to apply
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">
+              Close
+            </button>
+            <button
+              onClick={() => {
+                const results = new Map<string, string>();
+                for (const p of proposals) {
+                  if (selected.has(p.id) && p.proposed_result) {
+                    results.set(p.id, p.proposed_result);
+                  }
+                }
+                onApply(Array.from(selected), results);
+              }}
+              disabled={selected.size === 0}
+              className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold hover:bg-amber-500/30 disabled:opacity-40 transition-all">
+              Apply results {selected.size > 0 ? `(${selected.size})` : ''}
             </button>
           </div>
         </div>
@@ -797,6 +917,9 @@ export default function AdminSignalDesk() {
   const [recheckMsg, setRecheckMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [recheckProposals, setRecheckProposals] = useState<ReviewProposal[] | null>(null);
   const [recheckSummary, setRecheckSummary] = useState<ReviewSummary | null>(null);
+  const [repairLoading, setRepairLoading] = useState(false);
+  const [repairProposals, setRepairProposals] = useState<RepairProposal[] | null>(null);
+  const [repairMsg, setRepairMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -1099,6 +1222,111 @@ export default function AdminSignalDesk() {
     }
   };
 
+  const handleRepair = async () => {
+    const needsRepair = normalDrafts.filter(
+      (e) => e.type === 'use_case' && e.review_status === 'needs_attention' && (!e.result || e.result.trim() === '')
+    );
+    if (needsRepair.length === 0) {
+      setRepairMsg({ type: 'info', text: 'No use case entries need result repair.' });
+      return;
+    }
+
+    setRepairLoading(true);
+    setRepairMsg(null);
+    setRepairProposals(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setRepairMsg({ type: 'error', text: 'Not authenticated.' });
+        setRepairLoading(false);
+        return;
+      }
+
+      const funcUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-newsletter`;
+      const resp = await fetch(funcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          mode: 'repair',
+          entry_ids: needsRepair.map((e) => e.id),
+        }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        setRepairMsg({ type: 'error', text: result.error || `Repair failed (${resp.status})` });
+      } else {
+        const proposals: RepairProposal[] = result.proposals || [];
+        setRepairProposals(proposals);
+        const found = proposals.filter((p) => p.found).length;
+        const notFound = proposals.length - found;
+        if (found > 0 && notFound > 0) {
+          setRepairMsg({ type: 'info', text: `${found} outcome${found === 1 ? '' : 's'} found, ${notFound} not found in source. Review below.` });
+        } else if (found > 0) {
+          setRepairMsg({ type: 'success', text: `${found} outcome${found === 1 ? '' : 's'} found in source. Review below.` });
+        } else {
+          setRepairMsg({ type: 'info', text: 'No outcomes found in source for any entry. They remain Needs attention.' });
+        }
+      }
+    } catch {
+      setRepairMsg({ type: 'error', text: 'Network error during repair.' });
+    }
+    setRepairLoading(false);
+  };
+
+  const handleApplyRepair = async (selectedIds: string[], results: Map<string, string>) => {
+    if (selectedIds.length === 0 || results.size === 0) {
+      setRepairProposals(null);
+      return;
+    }
+
+    setRepairMsg(null);
+    let applied = 0;
+    let failed = 0;
+
+    for (const id of selectedIds) {
+      const resultText = results.get(id);
+      if (!resultText) continue;
+
+      const entry = entries.find((e) => e.id === id);
+      if (!entry) continue;
+
+      // Apply the result field, then re-review to recalculate status
+      const { error } = await supabase
+        .from('signal_desk_entries')
+        .update({ result: resultText })
+        .eq('id', id);
+
+      if (error) {
+        failed++;
+      } else {
+        applied++;
+        const updated = { ...entry, result: resultText };
+        const reReview = reReviewAfterApply(updated, undefined);
+        await supabase
+          .from('signal_desk_entries')
+          .update({ review_status: reReview.status, review_notes: reReview.notes })
+          .eq('id', id);
+        setEntries((prev) => prev.map((e) =>
+          e.id === id ? { ...e, result: resultText, review_status: reReview.status, review_notes: reReview.notes } : e
+        ));
+      }
+    }
+
+    if (failed > 0) {
+      setRepairMsg({ type: 'error', text: `${applied} results applied, ${failed} failed. Click Repair again to retry.` });
+    } else {
+      setRepairMsg({ type: 'success', text: `Applied ${applied} result${applied === 1 ? '' : 's'}. Status recalculated from remaining issues.` });
+    }
+    setRepairProposals(null);
+    loadEntries();
+  };
+
   const handleCreateBlankEntry = async () => {
     setProcessMsg(null);
     try {
@@ -1275,6 +1503,7 @@ export default function AdminSignalDesk() {
   // Separate drafts and possible duplicates
   const normalDrafts = entries.filter((e) => e.duplicate_status !== 'possible');
   const possibleDups = entries.filter((e) => e.duplicate_status === 'possible');
+  const needsAttentionCount = normalDrafts.filter((e) => e.review_status === 'needs_attention').length;
   const filteredDrafts = reviewFilter === 'all' ? normalDrafts
     : reviewFilter === 'not_checked' ? normalDrafts.filter((e) => !e.review_status || e.review_status === 'not_checked')
     : normalDrafts.filter((e) => e.review_status === reviewFilter);
@@ -1454,6 +1683,23 @@ export default function AdminSignalDesk() {
                     </span>
                   )}
                 </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={handleRepair} disabled={repairLoading || needsAttentionCount === 0}
+                    className="text-[10px] text-white/40 hover:text-white/70 transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed">
+                    {repairLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wrench className="w-3 h-3" />}
+                    Repair incomplete
+                  </button>
+                  {repairMsg && (
+                    <span className={`flex items-center gap-1 text-[10px] ${
+                      repairMsg.type === 'success' ? 'text-green-400'
+                      : repairMsg.type === 'error' ? 'text-red-400' : 'text-white/50'
+                    }`}>
+                      {repairMsg.type === 'success' ? <CheckCircle2 className="w-3 h-3" />
+                       : repairMsg.type === 'error' ? <AlertCircle className="w-3 h-3" /> : null}
+                      {repairMsg.text}
+                    </span>
+                  )}
+                </div>
                 <button onClick={loadEntries} className="text-[10px] text-white/40 hover:text-white/70 transition-colors flex items-center gap-1">
                   <RefreshCw className="w-3 h-3" /> Refresh
                 </button>
@@ -1594,6 +1840,15 @@ export default function AdminSignalDesk() {
           proposals={recheckProposals}
           onClose={() => setRecheckProposals(null)}
           onApply={handleApplyRecheck}
+        />
+      )}
+
+      {/* Repair modal */}
+      {repairProposals && repairProposals.length > 0 && (
+        <RepairModal
+          proposals={repairProposals}
+          onClose={() => setRepairProposals(null)}
+          onApply={handleApplyRepair}
         />
       )}
     </div>
