@@ -315,6 +315,55 @@ function extractReadableText(html: string): string {
   return cleaned;
 }
 
+// ── Strip sponsored sections from extracted text ──────
+// Removes "Presented by", "Sponsored by", "Together with" sections.
+// Each section runs from the marker line until the next blank-line-separated
+// editorial paragraph (i.e. the next line that looks like a heading or
+// the next blank line after the sponsored content).
+function stripSponsoredSections(text: string): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  let skipping = false;
+
+  // Markers that start a sponsored section
+  const sponsoredStart = /^(presented by|sponsored by|together with|brought to you by|in partnership with|our partner)\b/i;
+
+  // Lines that indicate the next editorial section has started
+  const editorialResume = /^(#{1,6}\s|[A-Z][A-Z \-]{3,}:|Roundtable|Community AI Workflow|Deep Dive|Quick Hit|Spotlight|Featured|Breaking|Update|In Focus|Editor's Note|Top Story)\b/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (sponsoredStart.test(trimmed)) {
+      skipping = true;
+      continue;
+    }
+
+    if (skipping) {
+      // Resume when we hit a blank line followed by editorial content,
+      // or an explicit editorial section heading
+      if (trimmed === "") {
+        // Peek ahead: if next non-empty line looks editorial, resume
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() === "") j++;
+        if (j >= lines.length || editorialResume.test(lines[j].trim()) || !sponsoredStart.test(lines[j].trim())) {
+          skipping = false;
+          // Don't skip this blank line — keep it as a separator
+          result.push(line);
+        }
+        continue;
+      }
+      // Still inside sponsored content — skip this line
+      continue;
+    }
+
+    result.push(line);
+  }
+
+  return result.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 // ── Extract site name from HTML or URL ────────────────
 function extractSiteName(url: string, html?: string): string | null {
   if (html) {
@@ -769,7 +818,7 @@ You MUST call the report_result tool with your finding.`;
         return new Response(JSON.stringify({ error: `Fetch failed (HTTP ${fetchResp.status}). Please paste the newsletter text instead.` }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       const html = await fetchResp.text();
-      inputText = extractReadableText(html);
+      inputText = stripSponsoredSections(extractReadableText(html));
       if (inputText.length < MIN_EXTRACTED_TEXT) {
         return new Response(JSON.stringify({ error: `Extracted too little text (${inputText.length} chars). Please paste the newsletter text instead.` }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }

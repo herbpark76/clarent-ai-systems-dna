@@ -248,7 +248,9 @@ function EntryCard({
       tags: draft.tags, role_tags: draft.role_tags, model_name: draft.model_name,
       vendor: draft.vendor, benchmark_score: draft.benchmark_score, benchmark_name: draft.benchmark_name,
       price_input: draft.price_input, price_output: draft.price_output, source_url: draft.source_url,
+      source_name: draft.source_name, source_date: draft.source_date,
       result: draft.result,
+      steps: draft.steps,
     });
     setEditing(false);
     setSaving(false);
@@ -384,6 +386,47 @@ function EntryCard({
               <textarea value={draft.result || ''} onChange={(e) => setDraft({ ...draft, result: e.target.value })} placeholder="Result (what happened when this was applied)" rows={2}
                 className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50 resize-y" />
             )}
+            {/* Steps editor (tutorial & use_case) */}
+            {(draft.type === 'tutorial' || draft.type === 'use_case') && (
+              <div className="rounded-lg bg-white/[0.03] border border-white/[0.08] p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-white/40 uppercase tracking-wide font-semibold">Steps</span>
+                  <button type="button" onClick={() => setDraft({ ...draft, steps: [...(draft.steps || []), { text: '' }] })}
+                    className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5">
+                    <Plus className="w-3 h-3" /> Add step
+                  </button>
+                </div>
+                {(draft.steps || []).map((step, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-[10px] text-white/30 mt-2 flex-shrink-0">{i + 1}.</span>
+                    <div className="flex-1 space-y-1">
+                      <input value={step.text} onChange={(e) => {
+                        const newSteps = [...(draft.steps || [])];
+                        newSteps[i] = { ...newSteps[i], text: e.target.value };
+                        setDraft({ ...draft, steps: newSteps });
+                      }} placeholder={`Step ${i + 1} description`}
+                        className="w-full px-2.5 py-1.5 rounded-md bg-white/[0.05] border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500/50" />
+                      <input value={step.prompt || ''} onChange={(e) => {
+                        const newSteps = [...(draft.steps || [])];
+                        const prompt = e.target.value;
+                        newSteps[i] = prompt ? { ...newSteps[i], prompt } : { text: newSteps[i].text };
+                        setDraft({ ...draft, steps: newSteps });
+                      }} placeholder="Optional prompt text"
+                        className="w-full px-2.5 py-1.5 rounded-md bg-white/[0.03] border border-white/[0.06] text-cyan-300/80 text-[11px] font-mono focus:outline-none focus:border-cyan-500/30" />
+                    </div>
+                    <button type="button" onClick={() => {
+                      const newSteps = (draft.steps || []).filter((_, idx) => idx !== i);
+                      setDraft({ ...draft, steps: newSteps });
+                    }} className="p-1 text-red-400/40 hover:text-red-400 mt-1">
+                      <XCircle className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {(!draft.steps || draft.steps.length === 0) && (
+                  <p className="text-[10px] text-white/25 py-1">No steps yet. Click "Add step" to begin.</p>
+                )}
+              </div>
+            )}
             <input value={(draft.tags || []).join(', ')} onChange={(e) => setDraft({ ...draft, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="Tags (comma separated)"
               className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50" />
             <input value={(draft.role_tags || []).join(', ')} onChange={(e) => setDraft({ ...draft, role_tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="Role tags (finance, legal, ops, marketing, IT)"
@@ -398,6 +441,12 @@ function EntryCard({
                 <input value={draft.price_output || ''} onChange={(e) => setDraft({ ...draft, price_output: e.target.value })} placeholder="Price (output)" className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs" />
               </div>
             )}
+            <div className="grid grid-cols-2 gap-2">
+              <input value={draft.source_name || ''} onChange={(e) => setDraft({ ...draft, source_name: e.target.value || null })} placeholder="Source name (e.g. The Rundown AI)"
+                className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500/50" />
+              <input type="date" value={draft.source_date || ''} onChange={(e) => setDraft({ ...draft, source_date: e.target.value || null })}
+                className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500/50" />
+            </div>
             <input value={draft.source_url || ''} onChange={(e) => setDraft({ ...draft, source_url: e.target.value })} placeholder="Source URL"
               className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50" />
             <div className="flex items-center gap-2">

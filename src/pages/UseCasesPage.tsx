@@ -49,10 +49,10 @@ function UseCaseCard({ entry }: { entry: SignalEntry }) {
             </ol>
           </div>
         )}
-        {entry.why_it_matters && (
+        {entry.result && (
           <div className="flex items-start gap-2">
             <span className="text-[10px] font-bold text-cyan-400 flex-shrink-0 mt-0.5 w-16">Result</span>
-            <p className="text-xs text-white/55 leading-relaxed flex-1">{entry.why_it_matters}</p>
+            <p className="text-xs text-white/55 leading-relaxed flex-1">{entry.result}</p>
           </div>
         )}
       </div>
