@@ -128,10 +128,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Create or update lp_profiles row
+    // Create or update lp_profiles row, set start_date to today
+    const today = new Date().toISOString().slice(0, 10);
     const { error: profileError } = await adminClient
       .from("lp_profiles")
-      .upsert({ id: userId, full_name: trimmedName });
+      .upsert({ id: userId, full_name: trimmedName, start_date: today });
 
     if (profileError) {
       return new Response(

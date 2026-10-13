@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Loader2, LogOut, CheckCircle2, Circle, PlayCircle,
@@ -6,7 +6,7 @@ import {
   GraduationCap, TrendingUp, Eye, ListChecks, NotebookPen,
   UserPlus, X, Mail, Check, Clock, AlertTriangle,
   FileText, Link2, MessageSquare, Send, Edit3,
-  ClipboardCheck, Hourglass,
+  ClipboardCheck, Hourglass, CalendarDays,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -60,11 +60,111 @@ interface ProgressRow {
 interface LearnerInfo {
   id: string;
   fullName: string;
+  startDate: string | null;
   approvedCount: number;
   overdueCount: number;
   awaitingReviewCount: number;
   currentWeek: number | null;
   latestEntryDate: string | null;
+}
+
+// ── Per-learner date computation ───────────────────────
+// Week 1: start_date through the first Sunday on or after start_date.
+// Week N (N>1): Monday through Sunday, offset (N-1)*7 days from the first Monday after Week 1's end.
+
+function dateToStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function strToDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function getDayOfWeek(d: Date): number {
+  return d.getDay(); // 0=Sun, 1=Mon, ...
+}
+
+/**
+ * Compute the start and end dates for a given week number, relative to a learner's start_date.
+ * Week 1: start_date → first Sunday on or after start_date (inclusive).
+ * Week N: Monday → Sunday, offset from the first Monday after Week 1's end.
+ */
+function computeWeekRange(startDate: string, weekNumber: number): { start: string; end: string } {
+  const sd = strToDate(startDate);
+  if (weekNumber === 1) {
+    // Week 1 starts on start_date
+    const start = sd;
+    // End on the first Sunday on or after start_date
+    const dow = getDayOfWeek(start);
+    // If start_date is Sunday (dow=0), week 1 is just that one day
+    const daysToSunday = dow === 0 ? 0 : 7 - dow;
+    const end = addDays(start, daysToSunday);
+    return { start: dateToStr(start), end: dateToStr(end) };
+  }
+  // Week 1 end
+  const w1Dow = getDayOfWeek(sd);
+  const daysToSunday1 = w1Dow === 0 ? 0 : 7 - w1Dow;
+  const w1End = addDays(sd, daysToSunday1);
+  // Week 2 starts the Monday after Week 1's Sunday
+  const w2Start = addDays(w1End, 1);
+  // Week N starts (N-2)*7 days after week 2 start
+  const weekStart = addDays(w2Start, (weekNumber - 2) * 7);
+  const weekEnd = addDays(weekStart, 6);
+  return { start: dateToStr(weekStart), end: dateToStr(weekEnd) };
+}
+
+/**
+ * Compute the due date for a task — the Sunday its week ends.
+ */
+function computeTaskDueDate(startDate: string, weekNumber: number): string {
+  return computeWeekRange(startDate, weekNumber).end;
+}
+
+/**
+ * Build a map of task_id → computed due date for a learner.
+ */
+function buildTaskDueDates(startDate: string | null, weeks: Week[], tasks: Task[]): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!startDate) {
+    // Fall back to stored due dates if no start_date
+    for (const t of tasks) {
+      if (t.due_date) map.set(t.id, t.due_date);
+    }
+    return map;
+  }
+  const weekNumById = new Map(weeks.map((w) => [w.id, w.week_number]));
+  for (const t of tasks) {
+    const wn = weekNumById.get(t.week_id);
+    if (wn) {
+      map.set(t.id, computeTaskDueDate(startDate, wn));
+    }
+  }
+  return map;
+}
+
+/**
+ * Build a map of week_id → {start, end} for a learner.
+ */
+function buildWeekRanges(startDate: string | null, weeks: Week[]): Map<string, { start: string; end: string }> {
+  const map = new Map<string, { start: string; end: string }>();
+  for (const w of weeks) {
+    if (startDate) {
+      map.set(w.id, computeWeekRange(startDate, w.week_number));
+    } else if (w.start_date && w.end_date) {
+      map.set(w.id, { start: w.start_date, end: w.end_date });
+    }
+  }
+  return map;
 }
 
 // ── Date / Time Helpers (US Central) ───────────────────
@@ -83,25 +183,23 @@ function getCentralDateStrFromISO(iso: string): string {
 
 function daysUntilDue(dueDate: string): number {
   const today = getCentralDateStr();
-  const [ty, tm, td] = today.split('-').map(Number);
-  const [dy, dm, dd] = dueDate.split('-').map(Number);
-  const todayDate = new Date(ty, tm - 1, td);
-  const dueDateObj = new Date(dy, dm - 1, dd);
+  const todayDate = strToDate(today);
+  const dueDateObj = strToDate(dueDate);
   return Math.round((dueDateObj.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function isOverdue(dueDate: string | null, status: TaskStatus): boolean {
+function isOverdue(dueDate: string | null | undefined, status: TaskStatus): boolean {
   if (!dueDate || status === 'submitted' || status === 'approved') return false;
   return daysUntilDue(dueDate) < 0;
 }
 
-function isDueSoon(dueDate: string | null, status: TaskStatus): boolean {
+function isDueSoon(dueDate: string | null | undefined, status: TaskStatus): boolean {
   if (!dueDate || status === 'submitted' || status === 'approved') return false;
   const days = daysUntilDue(dueDate);
   return days >= 0 && days <= 2;
 }
 
-function isDueThisWeek(dueDate: string | null, status: TaskStatus): boolean {
+function isDueThisWeek(dueDate: string | null | undefined, status: TaskStatus): boolean {
   if (!dueDate || status === 'submitted' || status === 'approved') return false;
   const days = daysUntilDue(dueDate);
   return days >= 0 && days <= 7;
@@ -109,15 +207,13 @@ function isDueThisWeek(dueDate: string | null, status: TaskStatus): boolean {
 
 function getDaysLate(dueDate: string, submittedAt: string): number {
   const submittedStr = getCentralDateStrFromISO(submittedAt);
-  const [sy, sm, sd] = submittedStr.split('-').map(Number);
-  const [dy, dm, dd] = dueDate.split('-').map(Number);
-  const submittedDate = new Date(sy, sm - 1, sd);
-  const dueDateObj = new Date(dy, dm - 1, dd);
+  const submittedDate = strToDate(submittedStr);
+  const dueDateObj = strToDate(dueDate);
   const diff = Math.round((submittedDate.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
   return diff > 0 ? diff : 0;
 }
 
-function formatDueDate(dueDate: string | null): string {
+function formatDueDate(dueDate: string | null | undefined): string {
   if (!dueDate) return '';
   const [y, m, d] = dueDate.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -129,11 +225,11 @@ function formatSubmittedDate(submittedAt: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function isCurrentWeek(week: Week): boolean {
-  if (!week.start_date || !week.end_date) return false;
+function isCurrentWeek(weekRange: { start: string; end: string } | undefined): boolean {
+  if (!weekRange) return false;
   const now = new Date();
-  const start = localDate(week.start_date);
-  const end = localDate(week.end_date);
+  const start = localDate(weekRange.start);
+  const end = localDate(weekRange.end);
   end.setHours(23, 59, 59);
   return now >= start && now <= end;
 }
@@ -169,13 +265,10 @@ function StatusIcon({ status, className = 'w-4 h-4' }: { status: TaskStatus; cla
 }
 
 // ── Due Date Badge ─────────────────────────────────────
-function DueDateBadge({ task, status }: { task: Task; status: TaskStatus }) {
-  if (!task.due_date || status === 'submitted' || status === 'approved') {
-    if (task.due_date && (status === 'submitted' || status === 'approved')) return null;
-    if (!task.due_date) return null;
-  }
-  const overdue = isOverdue(task.due_date, status);
-  const dueSoon = isDueSoon(task.due_date, status);
+function DueDateBadge({ dueDate, status }: { dueDate: string | null; status: TaskStatus }) {
+  if (!dueDate || status === 'submitted' || status === 'approved') return null;
+  const overdue = isOverdue(dueDate, status);
+  const dueSoon = isDueSoon(dueDate, status);
 
   if (overdue) {
     return (
@@ -244,8 +337,9 @@ function SignInGate({ onSignedIn }: { onSignedIn: () => void }) {
 }
 
 // ── Task Complete Modal ────────────────────────────────
-function TaskCompleteModal({ task, existingProgress, onClose, onSubmit }: {
+function TaskCompleteModal({ task, computedDueDate, existingProgress, onClose, onSubmit }: {
   task: Task;
+  computedDueDate: string | null;
   existingProgress: ProgressRow | undefined;
   onClose: () => void;
   onSubmit: (note: string, link: string) => Promise<void>;
@@ -294,9 +388,9 @@ function TaskCompleteModal({ task, existingProgress, onClose, onSubmit }: {
           <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
             <p className="text-sm font-semibold text-white">{task.title}</p>
             {task.description && <p className="text-xs text-white/40 mt-0.5">{task.description}</p>}
-            {task.due_date && (
+            {computedDueDate && (
               <p className="text-[10px] text-white/30 mt-1 flex items-center gap-1">
-                <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(task.due_date)}
+                <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(computedDueDate)}
               </p>
             )}
           </div>
@@ -428,7 +522,7 @@ function RequestChangesModal({ taskTitle, onClose, onSubmit }: {
 // ── Learner Dashboard ──────────────────────────────────
 function LearnerDashboard({
   track, weeks, tasks, progress, onSubmitTask, fullName, readOnly = false,
-  journalEntries, onJumpToJournal,
+  journalEntries, onJumpToJournal, startDate,
 }: {
   track: Track;
   weeks: Week[];
@@ -440,6 +534,7 @@ function LearnerDashboard({
   learnerId: string;
   journalEntries: JournalEntry[];
   onJumpToJournal: () => void;
+  startDate: string | null;
 }) {
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const totalTasks = tasks.length;
@@ -447,13 +542,17 @@ function LearnerDashboard({
   const submittedCount = Array.from(progress.values()).filter((p) => p.status === 'submitted').length;
   const pct = totalTasks > 0 ? Math.round((approvedCount / totalTasks) * 100) : 0;
 
+  const taskDueDates = useMemo(() => buildTaskDueDates(startDate, weeks, tasks), [startDate, weeks, tasks]);
+  const weekRanges = useMemo(() => buildWeekRanges(startDate, weeks), [startDate, weeks]);
+
   let overdueCount = 0;
   let dueThisWeekCount = 0;
   for (const task of tasks) {
     const p = progress.get(task.id);
     const status = p?.status || 'not_started';
-    if (isOverdue(task.due_date, status)) overdueCount++;
-    if (isDueThisWeek(task.due_date, status)) dueThisWeekCount++;
+    const dd = taskDueDates.get(task.id) || null;
+    if (isOverdue(dd, status)) overdueCount++;
+    if (isDueThisWeek(dd, status)) dueThisWeekCount++;
   }
 
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -469,6 +568,11 @@ function LearnerDashboard({
         </div>
         <h1 className="text-2xl font-bold text-white mb-2">{track.title}</h1>
         {track.description && <p className="text-sm text-white/45 leading-relaxed max-w-2xl">{track.description}</p>}
+        {startDate && !readOnly && (
+          <div className="flex items-center gap-1.5 mt-2 text-[11px] text-white/35">
+            <CalendarDays className="w-3 h-3" /> Started {formatDueDate(startDate)}
+          </div>
+        )}
       </div>
 
       {/* Summary counts */}
@@ -526,7 +630,8 @@ function LearnerDashboard({
           const weekTasks = tasks.filter((t) => t.week_id === week.id).sort((a, b) => a.sort_order - b.sort_order);
           const weekApproved = weekTasks.filter((t) => progress.get(t.id)?.status === 'approved').length;
           const weekPct = weekTasks.length > 0 ? Math.round((weekApproved / weekTasks.length) * 100) : 0;
-          const current = isCurrentWeek(week);
+          const wr = weekRanges.get(week.id);
+          const current = isCurrentWeek(wr);
 
           return (
             <div
@@ -547,10 +652,10 @@ function LearnerDashboard({
                   {week.goal && <p className="text-xs text-white/40 mt-0.5">{week.goal}</p>}
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
-                  {(week.start_date || week.end_date) && (
+                  {wr && (
                     <span className="hidden sm:flex items-center gap-1 text-[10px] text-white/30">
                       <Calendar className="w-2.5 h-2.5" />
-                      {formatDateRange(week.start_date, week.end_date)}
+                      {formatDateRange(wr.start, wr.end)}
                     </span>
                   )}
                   {current && (
@@ -585,7 +690,8 @@ function LearnerDashboard({
                     {weekTasks.map((task) => {
                       const p = progress.get(task.id);
                       const status = p?.status || 'not_started';
-                      const daysLate = p?.submitted_at && task.due_date ? getDaysLate(task.due_date, p.submitted_at) : 0;
+                      const dd = taskDueDates.get(task.id) || null;
+                      const daysLate = p?.submitted_at && dd ? getDaysLate(dd, p.submitted_at) : 0;
 
                       return (
                         <div
@@ -606,12 +712,12 @@ function LearnerDashboard({
 
                               {/* Due date + badges */}
                               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                {task.due_date && (
+                                {dd && (
                                   <span className="text-[10px] text-white/30 flex items-center gap-1">
-                                    <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(task.due_date)}
+                                    <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(dd)}
                                   </span>
                                 )}
-                                <DueDateBadge task={task} status={status} />
+                                <DueDateBadge dueDate={dd} status={status} />
                               </div>
 
                               {/* Submitted: show note, link, late flag */}
@@ -688,6 +794,7 @@ function LearnerDashboard({
       {activeTask && (
         <TaskCompleteModal
           task={activeTask}
+          computedDueDate={taskDueDates.get(activeTask.id) || null}
           existingProgress={progress.get(activeTask.id)}
           onClose={() => setActiveTask(null)}
           onSubmit={async (note, link) => {
@@ -820,7 +927,7 @@ function InviteLearnerModal({ onClose, onInvited }: {
 // ── Admin Learner Detail Tabs ──────────────────────────
 function LearnerDetailTabs({
   selectedLearner, selectedLearnerInfo, weeks, tasks, learnerProgress, adminId,
-  onApproveTask, onRequestChanges, onUpdateDueDate,
+  onApproveTask, onRequestChanges, onUpdateStartDate,
 }: {
   selectedLearner: string;
   selectedLearnerInfo: LearnerInfo;
@@ -830,13 +937,23 @@ function LearnerDetailTabs({
   adminId: string;
   onApproveTask: (progressId: string) => Promise<void>;
   onRequestChanges: (progressId: string, comment: string) => Promise<void>;
-  onUpdateDueDate: (taskId: string, dueDate: string) => Promise<void>;
+  onUpdateStartDate: (learnerId: string, startDate: string) => Promise<void>;
 }) {
   const hasJournal = !!selectedLearnerInfo.latestEntryDate;
   const [detailTab, setDetailTab] = useState<'progress' | 'journal'>(hasJournal ? 'journal' : 'progress');
   const [requestChangesFor, setRequestChangesFor] = useState<ProgressRow | null>(null);
+  const [startDateInput, setStartDateInput] = useState(selectedLearnerInfo.startDate || '');
   const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
+
+  const taskDueDates = useMemo(
+    () => buildTaskDueDates(selectedLearnerInfo.startDate, weeks, tasks),
+    [selectedLearnerInfo.startDate, weeks, tasks],
+  );
+  const weekRanges = useMemo(
+    () => buildWeekRanges(selectedLearnerInfo.startDate, weeks),
+    [selectedLearnerInfo.startDate, weeks],
+  );
 
   const approvedCount = learnerProgress.filter((p) => p.status === 'approved').length;
   const submittedCount = learnerProgress.filter((p) => p.status === 'submitted').length;
@@ -852,6 +969,26 @@ function LearnerDetailTabs({
         {approvedCount} of {tasks.length} tasks approved ({pct}%){submittedCount > 0 && ` · ${submittedCount} awaiting review`}
         {selectedLearnerInfo.overdueCount > 0 && <span className="text-red-400"> · {selectedLearnerInfo.overdueCount} overdue</span>}
       </p>
+
+      {/* Start date editor */}
+      <div className="flex items-center gap-3 mb-4 rounded-lg bg-white/[0.03] border border-white/[0.06] px-4 py-3">
+        <CalendarDays className="w-4 h-4 text-white/40" />
+        <span className="text-xs font-semibold text-white/40 uppercase tracking-wide">Start date</span>
+        <input
+          type="date"
+          value={startDateInput}
+          onChange={(e) => setStartDateInput(e.target.value)}
+          onBlur={() => {
+            if (startDateInput !== (selectedLearnerInfo.startDate || '')) {
+              onUpdateStartDate(selectedLearner, startDateInput);
+            }
+          }}
+          className="bg-white/[0.05] border border-white/10 text-white text-xs rounded px-2 py-1 focus:outline-none focus:border-blue-500/50 transition-all"
+        />
+        {selectedLearnerInfo.startDate && (
+          <span className="text-[10px] text-white/30">Weeks run from this date</span>
+        )}
+      </div>
 
       {/* Progress bar */}
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 mb-6">
@@ -885,6 +1022,7 @@ function LearnerDetailTabs({
           {sortedWeeks.map((week) => {
             const weekTasks = tasks.filter((t) => t.week_id === week.id).sort((a, b) => a.sort_order - b.sort_order);
             const weekApproved = weekTasks.filter((t) => progressMap.get(t.id)?.status === 'approved').length;
+            const wr = weekRanges.get(week.id);
             return (
               <div key={week.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
                 <div className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.05]">
@@ -892,13 +1030,19 @@ function LearnerDetailTabs({
                     {week.week_number}
                   </div>
                   <h3 className="text-sm font-bold text-white flex-1">{week.title}</h3>
+                  {wr && (
+                    <span className="text-[10px] text-white/30 flex items-center gap-1">
+                      <Calendar className="w-2.5 h-2.5" /> {formatDateRange(wr.start, wr.end)}
+                    </span>
+                  )}
                   <span className="text-xs font-semibold text-white/40">{weekApproved}/{weekTasks.length}</span>
                 </div>
                 <div className="px-5 py-2 divide-y divide-white/[0.04]">
                   {weekTasks.map((task) => {
                     const p = progressMap.get(task.id);
                     const status = p?.status || 'not_started';
-                    const daysLate = p?.submitted_at && task.due_date ? getDaysLate(task.due_date, p.submitted_at) : 0;
+                    const dd = taskDueDates.get(task.id) || null;
+                    const daysLate = p?.submitted_at && dd ? getDaysLate(dd, p.submitted_at) : 0;
 
                     return (
                       <div key={task.id} className="py-3">
@@ -914,15 +1058,14 @@ function LearnerDetailTabs({
                               <p className="text-xs text-white/35 mt-0.5">{task.description}</p>
                             )}
 
-                            {/* Due date (editable by admin) */}
+                            {/* Due date (computed from learner's start date) */}
                             <div className="flex items-center gap-2 mt-1.5">
-                              <input
-                                type="date"
-                                value={task.due_date || ''}
-                                onChange={(e) => onUpdateDueDate(task.id, e.target.value)}
-                                className="bg-white/[0.05] border border-white/10 text-white/60 text-[11px] rounded px-1.5 py-0.5 focus:outline-none focus:border-blue-500/50 transition-all"
-                              />
-                              <DueDateBadge task={task} status={status} />
+                              {dd && (
+                                <span className="text-[10px] text-white/30 flex items-center gap-1">
+                                  <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(dd)}
+                                </span>
+                              )}
+                              <DueDateBadge dueDate={dd} status={status} />
                             </div>
 
                             {/* Submitted/approved/changes: show note */}
@@ -1015,7 +1158,7 @@ function LearnerDetailTabs({
 // ── Admin Dashboard ────────────────────────────────────
 function AdminDashboard({
   learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
-  onInviteLearner, onApproveTask, onRequestChanges, onUpdateDueDate,
+  onInviteLearner, onApproveTask, onRequestChanges, onUpdateStartDate,
 }: {
   learners: LearnerInfo[];
   weeks: Week[];
@@ -1029,7 +1172,7 @@ function AdminDashboard({
   onInviteLearner: () => void;
   onApproveTask: (progressId: string) => Promise<void>;
   onRequestChanges: (progressId: string, comment: string) => Promise<void>;
-  onUpdateDueDate: (taskId: string, dueDate: string) => Promise<void>;
+  onUpdateStartDate: (learnerId: string, startDate: string) => Promise<void>;
 }) {
   const sortedLearners = [...learners].sort((a, b) => b.approvedCount - a.approvedCount);
   const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
@@ -1052,7 +1195,7 @@ function AdminDashboard({
           adminId={adminId}
           onApproveTask={onApproveTask}
           onRequestChanges={onRequestChanges}
-          onUpdateDueDate={onUpdateDueDate}
+          onUpdateStartDate={onUpdateStartDate}
         />
       </div>
     );
@@ -1146,6 +1289,9 @@ export default function LearnPortal() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [progressMap, setProgressMap] = useState<Map<string, ProgressRow>>(new Map());
 
+  // Learner's own start date (for trainee view)
+  const [myStartDate, setMyStartDate] = useState<string | null>(null);
+
   // Admin data
   const [learners, setLearners] = useState<LearnerInfo[]>([]);
   const [selectedLearner, setSelectedLearner] = useState<string | null>(null);
@@ -1222,7 +1368,7 @@ export default function LearnPortal() {
       (async () => {
         const { data: trainees } = await supabase.rpc('lp_list_trainees');
         if (cancelled) return;
-        const traineeRows = (trainees || []) as { id: string; full_name: string }[];
+        const traineeRows = (trainees || []) as { id: string; full_name: string; start_date: string | null }[];
 
         const { data: allProgress } = await supabase.from('lp_progress').select('*');
         if (cancelled) return;
@@ -1241,13 +1387,18 @@ export default function LearnPortal() {
           const approvedCount = pRows.filter((p) => p.status === 'approved').length;
           const awaitingReviewCount = pRows.filter((p) => p.status === 'submitted').length;
 
+          // Compute per-learner task due dates
+          const dueDates = buildTaskDueDates(t.start_date, weeks, tasks);
+
           let overdueCount = 0;
           for (const task of tasks) {
             const p = pRows.find((pr) => pr.task_id === task.id);
             const status = p?.status || 'not_started';
-            if (isOverdue(task.due_date, status)) overdueCount++;
+            const dd = dueDates.get(task.id) || null;
+            if (isOverdue(dd, status)) overdueCount++;
           }
 
+          // Compute current week from per-learner dates
           let currentWeek: number | null = null;
           for (const w of sortedWeeks) {
             const wTasks = tasks.filter((tk) => tk.week_id === w.id);
@@ -1271,6 +1422,7 @@ export default function LearnPortal() {
           return {
             id: t.id,
             fullName: t.full_name || 'Unknown learner',
+            startDate: t.start_date,
             approvedCount,
             overdueCount,
             awaitingReviewCount,
@@ -1300,10 +1452,22 @@ export default function LearnPortal() {
     } else {
       if (!userId) return;
       (async () => {
+        // Load learner's own progress
         const { data } = await supabase.from('lp_progress').select('*').eq('learner_id', userId);
         if (cancelled) return;
         const rows = (data || []) as ProgressRow[];
         setProgressMap(new Map(rows.map((r) => [r.task_id, r])));
+
+        // Load learner's own start_date from lp_profiles
+        const { data: profileData } = await supabase
+          .from('lp_profiles')
+          .select('start_date')
+          .eq('id', userId)
+          .maybeSingle();
+        if (cancelled) return;
+        setMyStartDate((profileData as { start_date: string | null } | null)?.start_date ?? null);
+
+        // Load journal entries
         const { data: jData } = await supabase
           .from('lp_journal_entries')
           .select('*')
@@ -1331,12 +1495,10 @@ export default function LearnPortal() {
       link: link || null,
     };
 
-    // Update submitted_at for new submissions and resubmissions, but not for edits
     if (!existing || existing.status !== 'submitted') {
       payload.submitted_at = now;
     }
 
-    // Optimistic update
     setProgressMap((prev) => {
       const next = new Map(prev);
       if (existing) {
@@ -1361,7 +1523,6 @@ export default function LearnPortal() {
     if (existing && existing.id !== 'temp') {
       const { error } = await supabase.from('lp_progress').update(payload).eq('id', existing.id);
       if (error) {
-        // Revert on error
         setProgressMap((prev) => {
           const next = new Map(prev);
           next.set(taskId, existing);
@@ -1396,7 +1557,6 @@ export default function LearnPortal() {
     await supabase.from('lp_progress').update({ status: 'approved', reviewed_at: now }).eq('id', progressId);
     if (selectedLearner) {
       await loadSelectedLearnerProgress(selectedLearner);
-      // Also update the learner list counts
       setLearners((prev) => prev.map((l) => {
         if (l.id !== selectedLearner) return l;
         const newProgress = learnerProgress.map((p) =>
@@ -1434,10 +1594,12 @@ export default function LearnPortal() {
     }
   };
 
-  // ── Admin: update due date ──
-  const handleUpdateDueDate = async (taskId: string, dueDate: string) => {
-    await supabase.from('lp_tasks').update({ due_date: dueDate || null }).eq('id', taskId);
-    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, due_date: dueDate || null } : t));
+  // ── Admin: update learner start date ──
+  const handleUpdateStartDate = async (learnerId: string, startDate: string) => {
+    await supabase.from('lp_profiles').update({ start_date: startDate || null }).eq('id', learnerId);
+    setLearners((prev) => prev.map((l) =>
+      l.id === learnerId ? { ...l, startDate: startDate || null } : l
+    ));
   };
 
   const handleSelectLearner = (learnerId: string) => {
@@ -1456,7 +1618,11 @@ export default function LearnPortal() {
     setProgressMap(new Map());
     setLearners([]);
     setSelectedLearner(null);
+    setMyStartDate(null);
   };
+
+  // Track Preview uses today as start_date
+  const previewStartDate = useMemo(() => getCentralDateStr(), []);
 
   if (!authChecked) {
     return (
@@ -1538,7 +1704,7 @@ export default function LearnPortal() {
               onInviteLearner={() => setShowInviteModal(true)}
               onApproveTask={handleApproveTask}
               onRequestChanges={handleRequestChanges}
-              onUpdateDueDate={handleUpdateDueDate}
+              onUpdateStartDate={handleUpdateStartDate}
             />
           )}
 
@@ -1560,6 +1726,7 @@ export default function LearnPortal() {
                 learnerId={userId}
                 journalEntries={[]}
                 onJumpToJournal={() => {}}
+                startDate={previewStartDate}
               />
             </>
           )}
@@ -1601,6 +1768,7 @@ export default function LearnPortal() {
               learnerId={userId}
               journalEntries={journalEntries}
               onJumpToJournal={() => setTraineeView('journal')}
+              startDate={myStartDate}
             />
           )}
         </div>
@@ -1621,12 +1789,12 @@ export default function LearnPortal() {
             if (track) {
               const reload = async () => {
                 const { data: trainees } = await supabase.rpc('lp_list_trainees');
-                const traineeRows = (trainees || []) as { id: string; full_name: string }[];
+                const traineeRows = (trainees || []) as { id: string; full_name: string; start_date: string | null }[];
                 setLearners((prev) => {
                   const existingIds = new Set(prev.map((p) => p.id));
                   const newOnes = traineeRows
                     .filter((t) => !existingIds.has(t.id))
-                    .map((t) => ({ id: t.id, fullName: t.full_name || 'Unknown learner', approvedCount: 0, overdueCount: 0, awaitingReviewCount: 0, currentWeek: null, latestEntryDate: null }));
+                    .map((t) => ({ id: t.id, fullName: t.full_name || 'Unknown learner', startDate: t.start_date, approvedCount: 0, overdueCount: 0, awaitingReviewCount: 0, currentWeek: null, latestEntryDate: null }));
                   return [...prev, ...newOnes];
                 });
               };
