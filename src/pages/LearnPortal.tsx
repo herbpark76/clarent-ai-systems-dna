@@ -4,6 +4,7 @@ import {
   Loader2, LogOut, CheckCircle2, Circle, PlayCircle,
   BookOpen, Calendar, Users, ChevronRight, ArrowLeft,
   GraduationCap, TrendingUp, Eye, ListChecks, NotebookPen,
+  UserPlus, X, Mail, Check,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -302,6 +303,121 @@ function LearnerDashboard({
   );
 }
 
+// ── Invite Learner Modal ─────────────────────────────
+function InviteLearnerModal({ onClose, onInvited }: {
+  onClose: () => void;
+  onInvited: () => void;
+}) {
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !fullName.trim()) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) { setError('Not authenticated.'); setSubmitting(false); return; }
+
+      const funcUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-learner`;
+      const resp = await fetch(funcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ email: email.trim(), full_name: fullName.trim() }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        setError(result.error || `Request failed (${resp.status})`);
+      } else {
+        setSuccess(true);
+        setTimeout(() => { onInvited(); onClose(); }, 1800);
+      }
+    } catch {
+      setError('Network error. Please try again.');
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1320] shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center">
+              <UserPlus className="w-4 h-4 text-cyan-400" />
+            </div>
+            <h3 className="text-sm font-bold text-white">Invite Learner</h3>
+          </div>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {success ? (
+          <div className="px-5 py-10 text-center">
+            <div className="w-12 h-12 rounded-full bg-green-500/15 flex items-center justify-center mx-auto mb-4">
+              <Check className="w-6 h-6 text-green-400" />
+            </div>
+            <p className="text-sm font-semibold text-white mb-1">Invite sent!</p>
+            <p className="text-xs text-white/40">An email has been sent to {email.trim()} with a link to set up their account.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+            <div>
+              <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="learner@example.com"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">Full Name</label>
+              <input
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Jane Doe"
+                className="w-full px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all"
+              />
+            </div>
+            {error && (
+              <p className="text-xs text-red-400 bg-red-500/[0.08] border border-red-500/15 rounded-lg px-3 py-2">{error}</p>
+            )}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button type="button" onClick={onClose}
+                className="px-3 py-2 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">
+                Cancel
+              </button>
+              <button type="submit" disabled={submitting}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-xs hover:from-blue-400 hover:to-cyan-400 disabled:opacity-60 transition-all">
+                {submitting ? 'Sending invite…' : 'Send invite'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Admin Dashboard ────────────────────────────────────
 function LearnerDetailTabs({
   selectedLearner, selectedLearnerInfo, weeks, tasks, learnerProgress, adminId,
@@ -399,6 +515,7 @@ function LearnerDetailTabs({
 
 function AdminDashboard({
   learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
+  onInviteLearner,
 }: {
   learners: LearnerInfo[];
   weeks: Week[];
@@ -409,6 +526,7 @@ function AdminDashboard({
   track: Track;
   learnerJournalEntries: JournalEntry[];
   adminId: string;
+  onInviteLearner: () => void;
 }) {
   const sortedLearners = [...learners].sort((a, b) => b.doneCount - a.doneCount);
   const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
@@ -437,9 +555,17 @@ function AdminDashboard({
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
-      <div className="flex items-center gap-3 mb-2">
-        <Users className="w-4 h-4 text-cyan-400" />
-        <h1 className="text-xl font-bold text-white">Learner Progress</h1>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3">
+          <Users className="w-4 h-4 text-cyan-400" />
+          <h1 className="text-xl font-bold text-white">Learner Progress</h1>
+        </div>
+        <button
+          onClick={onInviteLearner}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-cyan-300 text-xs font-semibold hover:from-blue-500/30 hover:to-cyan-500/30 transition-all"
+        >
+          <UserPlus className="w-3.5 h-3.5" /> Invite learner
+        </button>
       </div>
       <p className="text-sm text-white/40 mb-6">Track: {track.title}</p>
 
@@ -513,6 +639,7 @@ export default function LearnPortal() {
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [learnerJournalEntries, setLearnerJournalEntries] = useState<JournalEntry[]>([]);
   const [traineeView, setTraineeView] = useState<'track' | 'journal'>('track');
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -809,6 +936,7 @@ export default function LearnPortal() {
               track={track}
               learnerJournalEntries={learnerJournalEntries}
               adminId={userId}
+              onInviteLearner={() => setShowInviteModal(true)}
             />
           )}
 
@@ -884,6 +1012,29 @@ export default function LearnPortal() {
           Back to site
         </Link>
       </div>
+
+      {showInviteModal && isAdmin && (
+        <InviteLearnerModal
+          onClose={() => setShowInviteModal(false)}
+          onInvited={() => {
+            // Reload learners list to include the new invitee
+            if (track) {
+              const reload = async () => {
+                const { data: trainees } = await supabase.rpc('lp_list_trainees');
+                const traineeRows = (trainees || []) as { id: string; full_name: string }[];
+                setLearners((prev) => {
+                  const existingIds = new Set(prev.map((p) => p.id));
+                  const newOnes = traineeRows
+                    .filter((t) => !existingIds.has(t.id))
+                    .map((t) => ({ id: t.id, fullName: t.full_name || 'Unknown learner', doneCount: 0, currentWeek: null, latestEntryDate: null }));
+                  return [...prev, ...newOnes];
+                });
+              };
+              reload();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

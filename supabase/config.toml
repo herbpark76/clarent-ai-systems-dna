@@ -1,2 +1,5 @@
 [functions.process-newsletter]
 verify_jwt = true
+
+[functions.invite-learner]
+verify_jwt = true
