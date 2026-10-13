@@ -313,6 +313,7 @@ function InviteLearnerModal({ onClose, onInvited }: {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -338,8 +339,9 @@ function InviteLearnerModal({ onClose, onInvited }: {
       if (!resp.ok) {
         setError(result.error || `Request failed (${resp.status})`);
       } else {
+        setSuccessMsg(result.message || 'Invite email sent.');
         setSuccess(true);
-        setTimeout(() => { onInvited(); onClose(); }, 1800);
+        setTimeout(() => { onInvited(); onClose(); }, 2000);
       }
     } catch {
       setError('Network error. Please try again.');
@@ -368,8 +370,8 @@ function InviteLearnerModal({ onClose, onInvited }: {
             <div className="w-12 h-12 rounded-full bg-green-500/15 flex items-center justify-center mx-auto mb-4">
               <Check className="w-6 h-6 text-green-400" />
             </div>
-            <p className="text-sm font-semibold text-white mb-1">Invite sent!</p>
-            <p className="text-xs text-white/40">An email has been sent to {email.trim()} with a link to set up their account.</p>
+            <p className="text-sm font-semibold text-white mb-1">{successMsg.includes('Existing') ? 'Learner updated' : 'Invite sent!'}</p>
+            <p className="text-xs text-white/40">{successMsg.includes('Existing') ? successMsg : `An email has been sent to ${email.trim()} with a link to set up their account.`}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
