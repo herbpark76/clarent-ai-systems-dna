@@ -3,3 +3,6 @@ verify_jwt = true
 
 [functions.invite-learner]
 verify_jwt = true
+
+[functions.learn-coach]
+verify_jwt = true

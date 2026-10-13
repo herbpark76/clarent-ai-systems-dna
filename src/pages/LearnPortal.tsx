@@ -8,7 +8,7 @@ import {
   FileText, Link2, MessageSquare, Send, Edit3,
   ClipboardCheck, Hourglass, CalendarDays,
   Video, Lightbulb, Plus, Trash2, ExternalLink, BookMarked, ChevronUp, ChevronDown,
-  KeyRound, ShieldCheck,
+  KeyRound, ShieldCheck, Sparkles, Mic,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -17,6 +17,11 @@ import {
   getEntryCountByWeek, getLatestEntryDate,
   type JournalEntry,
 } from '../components/Journal';
+import {
+  CoachFeedbackModal, StatusBadge, KnowledgeCheckCard, InterviewPracticeCard,
+  AdminQuizSummary, AdminInterviewSummary,
+} from '../components/learnCoachComponents';
+import type { QuizAttempt, InterviewPracticeRow, CoachFeedback } from '../lib/learnCoach';
 
 // ── Types ──────────────────────────────────────────────
 type TaskStatus = 'not_started' | 'in_progress' | 'submitted' | 'approved' | 'changes_requested';
@@ -57,6 +62,10 @@ interface ProgressRow {
   submitted_at: string | null;
   reviewed_at: string | null;
   review_comment: string | null;
+  coach_feedback?: string | null;
+  coach_question?: string | null;
+  coach_answer?: string | null;
+  coach_completed?: boolean | null;
 }
 
 type ResourceKind = 'doc' | 'video' | 'concept' | 'tutorial';
@@ -822,6 +831,10 @@ function LearnerDashboard({
   onUpdateResource?: (id: string, title: string, url: string, kind: ResourceKind) => Promise<void>;
   onDeleteResource?: (id: string) => Promise<void>;
   onReorderResource?: (id: string, dir: 'up' | 'down') => Promise<void>;
+  quizAttempts?: QuizAttempt[];
+  interviewPractice?: InterviewPracticeRow[];
+  onQuizPassed?: () => void;
+  onNewInterviewAttempt?: () => void;
 }) {
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const totalTasks = tasks.length;
@@ -854,6 +867,7 @@ function LearnerDashboard({
 
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
+  const [coachModal, setCoachModal] = useState<{ task: Task; note: string; link: string } | null>(null);
   const entryCountByWeek = getEntryCountByWeek(journalEntries);
 
   return (
@@ -1022,6 +1036,7 @@ function LearnerDashboard({
                                   </span>
                                 )}
                                 <DueDateBadge dueDate={dd} status={status} />
+                                <StatusBadge status={status} reviewedAt={p?.reviewed_at} />
                               </div>
 
                               {/* Learning resources */}
@@ -1092,6 +1107,26 @@ function LearnerDashboard({
                               {readOnly && status === 'changes_requested' && p?.review_comment && (
                                 <p className="text-[10px] text-red-400/60 mt-1">Changes requested — learner can resubmit.</p>
                               )}
+
+                              {/* Coach feedback display for submitted/approved/changes_requested */}
+                              {(status === 'submitted' || status === 'approved' || status === 'changes_requested') && p?.coach_feedback && (
+                                <div className="mt-2 rounded-lg bg-violet-500/[0.06] border border-violet-500/15 p-3 space-y-1.5">
+                                  <p className="text-[10px] font-semibold text-violet-300/80 uppercase tracking-wide">AI Coach Feedback</p>
+                                  <p className="text-xs text-white/60 leading-relaxed">{p.coach_feedback}</p>
+                                  {p.coach_question && (
+                                    <div className="pt-1">
+                                      <p className="text-[10px] text-violet-300/60 uppercase tracking-wide">Follow-up question</p>
+                                      <p className="text-xs text-white/50 leading-relaxed">{p.coach_question}</p>
+                                    </div>
+                                  )}
+                                  {p.coach_answer && (
+                                    <div className="pt-1">
+                                      <p className="text-[10px] text-green-400/60 uppercase tracking-wide">Your answer</p>
+                                      <p className="text-xs text-white/50 leading-relaxed">{p.coach_answer}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1100,6 +1135,35 @@ function LearnerDashboard({
                   </div>
                 )}
               </div>
+
+              {/* Knowledge Check card */}
+              {!readOnly && quizAttempts && onQuizPassed && (
+                <div className="px-5 pb-3">
+                  <KnowledgeCheckCard
+                    week={week}
+                    weekTasks={weekTasks}
+                    resources={resources}
+                    learnerId={learnerId}
+                    onPassed={onQuizPassed}
+                    quizAttempts={quizAttempts}
+                  />
+                </div>
+              )}
+
+              {/* Interview Practice card (Week 3 onward) */}
+              {!readOnly && interviewPractice && onNewInterviewAttempt && week.week_number >= 3 && (
+                <div className="px-5 pb-3">
+                  <InterviewPracticeCard
+                    learnerId={learnerId}
+                    journalEntries={journalEntries}
+                    approvedTasks={tasks
+                      .filter((t) => progress.get(t.id)?.status === 'approved' && t.week_id !== week.id)
+                      .map((t) => ({ title: t.title, completion_note: progress.get(t.id)?.completion_note || '' }))}
+                    interviewHistory={interviewPractice}
+                    onNewAttempt={onNewInterviewAttempt}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
@@ -1123,14 +1187,38 @@ function LearnerDashboard({
       )}
 
       {/* Task completion modal */}
-      {activeTask && (
+      {activeTask && !coachModal && (
         <TaskCompleteModal
           task={activeTask}
           computedDueDate={taskDueDates.get(activeTask.id) || null}
           existingProgress={progress.get(activeTask.id)}
           onClose={() => setActiveTask(null)}
           onSubmit={async (note, link) => {
-            await onSubmitTask(activeTask.id, note, link);
+            if (!readOnly) {
+              setCoachModal({ task: activeTask, note, link });
+            } else {
+              await onSubmitTask(activeTask.id, note, link);
+              setActiveTask(null);
+            }
+          }}
+        />
+      )}
+
+      {/* Coach feedback modal */}
+      {coachModal && (
+        <CoachFeedbackModal
+          task={coachModal.task}
+          resources={resourcesByTask.get(coachModal.task.id) || []}
+          existingProgress={progress.get(coachModal.task.id)}
+          learnerNote={coachModal.note}
+          learnerLink={coachModal.link}
+          onClose={() => {
+            setCoachModal(null);
+            setActiveTask(null);
+          }}
+          onComplete={async (feedback: CoachFeedback, answer: string) => {
+            await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link, feedback, answer);
+            setCoachModal(null);
             setActiveTask(null);
           }}
         />
@@ -1261,6 +1349,7 @@ function LearnerDetailTabs({
   selectedLearner, selectedLearnerInfo, weeks, tasks, learnerProgress, adminId,
   onApproveTask, onRequestChanges, onUpdateStartDate,
   resources, onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
+  learnerQuizAttempts, learnerInterviewPractice,
 }: {
   selectedLearner: string;
   selectedLearnerInfo: LearnerInfo;
@@ -1276,9 +1365,14 @@ function LearnerDetailTabs({
   onUpdateResource: (id: string, title: string, url: string, kind: ResourceKind) => Promise<void>;
   onDeleteResource: (id: string) => Promise<void>;
   onReorderResource: (id: string, dir: 'up' | 'down') => Promise<void>;
+  learnerQuizAttempts: QuizAttempt[];
+  learnerInterviewPractice: InterviewPracticeRow[];
 }) {
   const hasJournal = !!selectedLearnerInfo.latestEntryDate;
-  const [detailTab, setDetailTab] = useState<'progress' | 'journal'>(hasJournal ? 'journal' : 'progress');
+  const hasAwaitingReview = learnerProgress.some((p) => p.status === 'submitted');
+  const [detailTab, setDetailTab] = useState<'progress' | 'journal' | 'coach'>(
+    hasAwaitingReview ? 'progress' : (hasJournal ? 'journal' : 'progress')
+  );
   const [requestChangesFor, setRequestChangesFor] = useState<ProgressRow | null>(null);
   const [startDateInput, setStartDateInput] = useState(selectedLearnerInfo.startDate || '');
   const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
@@ -1363,6 +1457,16 @@ function LearnerDetailTabs({
         >
           <NotebookPen className="w-3.5 h-3.5" /> Journal
         </button>
+        {(learnerQuizAttempts.length > 0 || learnerInterviewPractice.length > 0) && (
+          <button
+            onClick={() => setDetailTab('coach')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              detailTab === 'coach' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" /> Coach
+          </button>
+        )}
       </div>
 
       {detailTab === 'progress' ? (
@@ -1372,6 +1476,7 @@ function LearnerDetailTabs({
             const weekApproved = weekTasks.filter((t) => progressMap.get(t.id)?.status === 'approved').length;
             const wr = weekRanges.get(week.id);
             const weekResourceCount = weekTasks.reduce((sum, t) => sum + (resourcesByTask.get(t.id)?.length || 0), 0);
+            const weekQuizAttempts = learnerQuizAttempts.filter((a) => a.week_id === week.id);
             return (
               <div key={week.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
                 <div className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.05]">
@@ -1413,13 +1518,14 @@ function LearnerDetailTabs({
                             )}
 
                             {/* Due date (computed from learner's start date) */}
-                            <div className="flex items-center gap-2 mt-1.5">
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                               {dd && (
                                 <span className="text-[10px] text-white/30 flex items-center gap-1">
                                   <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(dd)}
                                 </span>
                               )}
                               <DueDateBadge dueDate={dd} status={status} />
+                              <StatusBadge status={status} reviewedAt={p?.reviewed_at} />
                             </div>
 
                             {/* Learning resources */}
@@ -1474,6 +1580,20 @@ function LearnerDetailTabs({
                               </div>
                             )}
 
+                            {/* Coach feedback display for admin */}
+                            {(status === 'submitted' || status === 'approved' || status === 'changes_requested') && p?.coach_feedback && (
+                              <div className="mt-2 rounded-lg bg-violet-500/[0.06] border border-violet-500/15 p-3 space-y-1.5">
+                                <p className="text-[10px] font-semibold text-violet-300/80 uppercase tracking-wide">AI Coach Feedback</p>
+                                <p className="text-xs text-white/60 leading-relaxed">{p.coach_feedback}</p>
+                                {p.coach_question && (
+                                  <p className="text-xs text-white/40"><span className="text-[10px] text-violet-300/60 uppercase">Q:</span> {p.coach_question}</p>
+                                )}
+                                {p.coach_answer && (
+                                  <p className="text-xs text-white/40"><span className="text-[10px] text-green-400/60 uppercase">A:</span> {p.coach_answer}</p>
+                                )}
+                              </div>
+                            )}
+
                             {/* Admin action buttons for submitted tasks */}
                             {status === 'submitted' && p && (
                               <div className="flex items-center gap-2 mt-2">
@@ -1497,12 +1617,42 @@ function LearnerDetailTabs({
                     );
                   })}
                 </div>
+
+                {/* Admin quiz summary per week */}
+                {weekQuizAttempts.length > 0 && (
+                  <div className="px-5 py-2 border-t border-white/[0.04]">
+                    <AdminQuizSummary weekId={week.id} quizAttempts={learnerQuizAttempts} />
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-      ) : (
+      ) : detailTab === 'journal' ? (
         <AdminJournal learnerId={selectedLearner} weeks={weeks} adminId={adminId} />
+      ) : (
+        <div className="space-y-4">
+          {sortedWeeks.map((week) => {
+            const weekQuiz = learnerQuizAttempts.filter((a) => a.week_id === week.id);
+            if (weekQuiz.length === 0) return null;
+            return (
+              <div key={week.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-white/40">Week {week.week_number}</span>
+                  <span className="text-sm font-semibold text-white">{week.title}</span>
+                </div>
+                <AdminQuizSummary weekId={week.id} quizAttempts={learnerQuizAttempts} />
+              </div>
+            );
+          })}
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-4 h-4 text-violet-400" />
+              <span className="text-sm font-semibold text-white">Interview Practice</span>
+            </div>
+            <AdminInterviewSummary interviewHistory={learnerInterviewPractice} />
+          </div>
+        </div>
       )}
 
       {/* Resource edit modal */}
@@ -1542,6 +1692,7 @@ function AdminDashboard({
   learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
   onInviteLearner, onApproveTask, onRequestChanges, onUpdateStartDate,
   resources, onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
+  learnerQuizAttempts, learnerInterviewPractice,
 }: {
   learners: LearnerInfo[];
   weeks: Week[];
@@ -1561,6 +1712,8 @@ function AdminDashboard({
   onUpdateResource: (id: string, title: string, url: string, kind: ResourceKind) => Promise<void>;
   onDeleteResource: (id: string) => Promise<void>;
   onReorderResource: (id: string, dir: 'up' | 'down') => Promise<void>;
+  learnerQuizAttempts: QuizAttempt[];
+  learnerInterviewPractice: InterviewPracticeRow[];
 }) {
   const sortedLearners = [...learners].sort((a, b) => b.approvedCount - a.approvedCount);
   const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
@@ -1589,6 +1742,8 @@ function AdminDashboard({
           onUpdateResource={onUpdateResource}
           onDeleteResource={onDeleteResource}
           onReorderResource={onReorderResource}
+          learnerQuizAttempts={learnerQuizAttempts.filter((a) => a.learner_id === selectedLearner)}
+          learnerInterviewPractice={learnerInterviewPractice.filter((p) => p.learner_id === selectedLearner)}
         />
       </div>
     );
@@ -1697,6 +1852,10 @@ export default function LearnPortal() {
   const [learnerJournalEntries, setLearnerJournalEntries] = useState<JournalEntry[]>([]);
   const [traineeView, setTraineeView] = useState<'track' | 'journal'>('track');
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
+  const [interviewPractice, setInterviewPractice] = useState<InterviewPracticeRow[]>([]);
+  const [learnerQuizAttempts, setLearnerQuizAttempts] = useState<QuizAttempt[]>([]);
+  const [learnerInterviewPractice, setLearnerInterviewPractice] = useState<InterviewPracticeRow[]>([]);
   const [authView, setAuthView] = useState<'signin' | 'forgot'>('signin');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
 
@@ -1844,6 +2003,12 @@ export default function LearnPortal() {
         if (cancelled) return;
         const journalRows = (allJournal || []) as JournalEntry[];
         setLearnerJournalEntries(journalRows);
+
+        // Load all quiz attempts and interview practice for admin view
+        const { data: allQuiz } = await supabase.from('lp_quiz_attempts').select('*').order('created_at', { ascending: false });
+        if (!cancelled) setLearnerQuizAttempts((allQuiz || []) as QuizAttempt[]);
+        const { data: allInterview } = await supabase.from('lp_interview_practice').select('*').order('created_at', { ascending: false });
+        if (!cancelled) setLearnerInterviewPractice((allInterview || []) as InterviewPracticeRow[]);
         const journalByLearner = new Map<string, JournalEntry[]>();
         for (const je of journalRows) {
           if (!journalByLearner.has(je.learner_id)) journalByLearner.set(je.learner_id, []);
@@ -1881,6 +2046,14 @@ export default function LearnPortal() {
           .order('entry_date', { ascending: false });
         if (cancelled) return;
         setJournalEntries((jData || []) as JournalEntry[]);
+
+        // Load quiz attempts
+        const { data: qaData } = await supabase.from('lp_quiz_attempts').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
+        if (!cancelled) setQuizAttempts((qaData || []) as QuizAttempt[]);
+
+        // Load interview practice
+        const { data: ipData } = await supabase.from('lp_interview_practice').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
+        if (!cancelled) setInterviewPractice((ipData || []) as InterviewPracticeRow[]);
       })();
     }
     return () => { cancelled = true; };
@@ -1892,13 +2065,17 @@ export default function LearnPortal() {
   }, []);
 
   // ── Task submission handler ──
-  const handleSubmitTask = async (taskId: string, note: string, link: string) => {
+  const handleSubmitTask = async (taskId: string, note: string, link: string, coachFeedback?: CoachFeedback, coachAnswer?: string) => {
     const existing = progressMap.get(taskId);
     const now = new Date().toISOString();
     const payload: Record<string, unknown> = {
       status: 'submitted',
       completion_note: note,
       link: link || null,
+      coach_feedback: coachFeedback?.whats_good ? `Good: ${coachFeedback.whats_good}\n\nMissing: ${coachFeedback.whats_missing}` : null,
+      coach_question: coachFeedback?.follow_up || null,
+      coach_answer: coachAnswer || null,
+      coach_completed: !!(coachFeedback && coachAnswer),
     };
 
     if (!existing || existing.status !== 'submitted') {
@@ -1921,6 +2098,10 @@ export default function LearnPortal() {
           submitted_at: payload.submitted_at as string,
           reviewed_at: null,
           review_comment: null,
+          coach_feedback: payload.coach_feedback as string | null,
+          coach_question: payload.coach_question as string | null,
+          coach_answer: payload.coach_answer as string | null,
+          coach_completed: payload.coach_completed as boolean | null,
         });
       }
       return next;
@@ -2170,6 +2351,8 @@ export default function LearnPortal() {
               onUpdateResource={handleUpdateResource}
               onDeleteResource={handleDeleteResource}
               onReorderResource={handleReorderResource}
+              learnerQuizAttempts={learnerQuizAttempts}
+              learnerInterviewPractice={learnerInterviewPractice}
             />
           )}
 
@@ -2198,6 +2381,7 @@ export default function LearnPortal() {
                 onUpdateResource={handleUpdateResource}
                 onDeleteResource={handleDeleteResource}
                 onReorderResource={handleReorderResource}
+                quizAttempts={[]}
               />
             </>
           )}
@@ -2241,6 +2425,16 @@ export default function LearnPortal() {
               onJumpToJournal={() => setTraineeView('journal')}
               startDate={myStartDate}
               resources={resources}
+              quizAttempts={quizAttempts}
+              interviewPractice={interviewPractice}
+              onQuizPassed={async () => {
+                const { data: qaData } = await supabase.from('lp_quiz_attempts').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
+                setQuizAttempts((qaData || []) as QuizAttempt[]);
+              }}
+              onNewInterviewAttempt={async () => {
+                const { data: ipData } = await supabase.from('lp_interview_practice').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
+                setInterviewPractice((ipData || []) as InterviewPracticeRow[]);
+              }}
             />
           )}
         </div>
