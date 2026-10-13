@@ -8,6 +8,7 @@ import {
   FileText, Link2, MessageSquare, Send, Edit3,
   ClipboardCheck, Hourglass, CalendarDays,
   Video, Lightbulb, Plus, Trash2, ExternalLink, BookMarked, ChevronUp, ChevronDown,
+  KeyRound, ShieldCheck,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -455,7 +456,7 @@ function ResourceEditModal({ resource, taskId, onClose, onSave }: {
 }
 
 // ── Auth Gate ──────────────────────────────────────────
-function SignInGate({ onSignedIn }: { onSignedIn: () => void }) {
+function SignInGate({ onSignedIn, onForgotPassword }: { onSignedIn: () => void; onForgotPassword: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -495,9 +496,121 @@ function SignInGate({ onSignedIn }: { onSignedIn: () => void }) {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        <p className="text-[10px] text-white/25 text-center mt-4">
-          Don't have an account? Contact your administrator for an invite.
-        </p>
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-[10px] text-white/25">
+            Don't have an account? Contact your administrator for an invite.
+          </p>
+          <button onClick={onForgotPassword} className="text-[10px] text-cyan-400/60 hover:text-cyan-400 transition-colors">
+            Forgot password?
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Forgot Password ────────────────────────────────────
+function ForgotPassword({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const redirectTo = `${window.location.origin}/learn`;
+    await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    // Always show the same message regardless of whether the email exists
+    setSent(true);
+    setLoading(false);
+  };
+
+  return (
+    <div className="pt-20 min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center mx-auto mb-4">
+            <KeyRound className="w-5 h-5 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-white mb-1">Reset password</h1>
+          <p className="text-sm text-white/40">Enter your email and we'll send a reset link</p>
+        </div>
+        {sent ? (
+          <div className="rounded-xl border border-green-500/20 bg-green-500/[0.04] p-4 text-center">
+            <Check className="w-5 h-5 text-green-400 mx-auto mb-2" />
+            <p className="text-sm text-white/70 leading-relaxed">
+              If that email has an account, a reset link is on its way.
+            </p>
+            <p className="text-[10px] text-white/30 mt-2">Check your inbox and spam folder.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email"
+              className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+            <button type="submit" disabled={loading}
+              className="w-full py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-sm hover:from-blue-400 hover:to-cyan-400 disabled:opacity-60 transition-all">
+              {loading ? 'Sending…' : 'Send reset link'}
+            </button>
+          </form>
+        )}
+        <button onClick={onBack} className="mt-4 text-[10px] text-white/30 hover:text-white/60 transition-colors mx-auto block">
+          Back to sign in
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Reset Password (after recovery link) ───────────────
+function ResetPassword({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (password !== confirm) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    if (updateError) {
+      setError(updateError.message);
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+    onDone();
+  };
+
+  return (
+    <div className="pt-20 min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-400 flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck className="w-5 h-5 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-white mb-1">Set new password</h1>
+          <p className="text-sm text-white/40">Choose a new password for your account</p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password"
+            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+          <input type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Confirm password"
+            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold text-sm hover:from-green-400 hover:to-emerald-400 disabled:opacity-60 transition-all">
+            {loading ? 'Saving…' : 'Set new password'}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -1584,6 +1697,8 @@ export default function LearnPortal() {
   const [learnerJournalEntries, setLearnerJournalEntries] = useState<JournalEntry[]>([]);
   const [traineeView, setTraineeView] = useState<'track' | 'journal'>('track');
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [authView, setAuthView] = useState<'signin' | 'forgot'>('signin');
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -1597,7 +1712,11 @@ export default function LearnPortal() {
       }
       setAuthChecked(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true);
+        return;
+      }
       setAuthed(!!session);
       if (session) {
         setUserId(session.user.id);
@@ -1959,10 +2078,28 @@ export default function LearnPortal() {
   }
 
   if (!authed) {
+    if (passwordRecovery) {
+      return (
+        <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
+          <NavBar />
+          <ResetPassword onDone={() => {
+            setPasswordRecovery(false);
+            setAuthed(true);
+          }} />
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
         <NavBar />
-        <SignInGate onSignedIn={() => setAuthed(true)} />
+        {authView === 'forgot' ? (
+          <ForgotPassword onBack={() => setAuthView('signin')} />
+        ) : (
+          <SignInGate
+            onSignedIn={() => setAuthed(true)}
+            onForgotPassword={() => setAuthView('forgot')}
+          />
+        )}
       </div>
     );
   }
