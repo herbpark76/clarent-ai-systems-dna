@@ -4,7 +4,9 @@ import {
   Loader2, LogOut, CheckCircle2, Circle, PlayCircle,
   BookOpen, Calendar, Users, ChevronRight, ArrowLeft,
   GraduationCap, TrendingUp, Eye, ListChecks, NotebookPen,
-  UserPlus, X, Mail, Check,
+  UserPlus, X, Mail, Check, Clock, AlertTriangle,
+  FileText, Link2, MessageSquare, Send, Edit3,
+  ClipboardCheck, Hourglass,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -15,7 +17,7 @@ import {
 } from '../components/Journal';
 
 // ── Types ──────────────────────────────────────────────
-type TaskStatus = 'not_started' | 'in_progress' | 'done';
+type TaskStatus = 'not_started' | 'in_progress' | 'submitted' | 'approved' | 'changes_requested';
 
 interface Track {
   id: string;
@@ -39,6 +41,7 @@ interface Task {
   title: string;
   description: string | null;
   sort_order: number;
+  due_date: string | null;
 }
 
 interface ProgressRow {
@@ -47,14 +50,148 @@ interface ProgressRow {
   task_id: string;
   status: TaskStatus;
   completed_at: string | null;
+  completion_note: string | null;
+  link: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  review_comment: string | null;
 }
 
 interface LearnerInfo {
   id: string;
   fullName: string;
-  doneCount: number;
+  approvedCount: number;
+  overdueCount: number;
+  awaitingReviewCount: number;
   currentWeek: number | null;
   latestEntryDate: string | null;
+}
+
+// ── Date / Time Helpers (US Central) ───────────────────
+function localDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function getCentralDateStr(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+}
+
+function getCentralDateStrFromISO(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+}
+
+function daysUntilDue(dueDate: string): number {
+  const today = getCentralDateStr();
+  const [ty, tm, td] = today.split('-').map(Number);
+  const [dy, dm, dd] = dueDate.split('-').map(Number);
+  const todayDate = new Date(ty, tm - 1, td);
+  const dueDateObj = new Date(dy, dm - 1, dd);
+  return Math.round((dueDateObj.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function isOverdue(dueDate: string | null, status: TaskStatus): boolean {
+  if (!dueDate || status === 'submitted' || status === 'approved') return false;
+  return daysUntilDue(dueDate) < 0;
+}
+
+function isDueSoon(dueDate: string | null, status: TaskStatus): boolean {
+  if (!dueDate || status === 'submitted' || status === 'approved') return false;
+  const days = daysUntilDue(dueDate);
+  return days >= 0 && days <= 2;
+}
+
+function isDueThisWeek(dueDate: string | null, status: TaskStatus): boolean {
+  if (!dueDate || status === 'submitted' || status === 'approved') return false;
+  const days = daysUntilDue(dueDate);
+  return days >= 0 && days <= 7;
+}
+
+function getDaysLate(dueDate: string, submittedAt: string): number {
+  const submittedStr = getCentralDateStrFromISO(submittedAt);
+  const [sy, sm, sd] = submittedStr.split('-').map(Number);
+  const [dy, dm, dd] = dueDate.split('-').map(Number);
+  const submittedDate = new Date(sy, sm - 1, sd);
+  const dueDateObj = new Date(dy, dm - 1, dd);
+  const diff = Math.round((submittedDate.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
+  return diff > 0 ? diff : 0;
+}
+
+function formatDueDate(dueDate: string | null): string {
+  if (!dueDate) return '';
+  const [y, m, d] = dueDate.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatSubmittedDate(submittedAt: string): string {
+  const centralDate = getCentralDateStrFromISO(submittedAt);
+  const [y, m, d] = centralDate.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function isCurrentWeek(week: Week): boolean {
+  if (!week.start_date || !week.end_date) return false;
+  const now = new Date();
+  const start = localDate(week.start_date);
+  const end = localDate(week.end_date);
+  end.setHours(23, 59, 59);
+  return now >= start && now <= end;
+}
+
+function formatDateRange(start: string | null, end: string | null): string {
+  if (!start && !end) return '';
+  const fmt = (d: string) => localDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (start && end) return `${fmt(start)} – ${fmt(end)}`;
+  return fmt(start || end!);
+}
+
+function getInitials(name: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+// ── Status Icon ────────────────────────────────────────
+function StatusIcon({ status, className = 'w-4 h-4' }: { status: TaskStatus; className?: string }) {
+  switch (status) {
+    case 'approved':
+      return <CheckCircle2 className={`${className} text-green-400 flex-shrink-0`} />;
+    case 'submitted':
+      return <Send className={`${className} text-cyan-400 flex-shrink-0`} />;
+    case 'changes_requested':
+      return <AlertTriangle className={`${className} text-red-400 flex-shrink-0`} />;
+    case 'in_progress':
+      return <PlayCircle className={`${className} text-amber-400 flex-shrink-0`} />;
+    default:
+      return <Circle className={`${className} text-white/20 flex-shrink-0`} />;
+  }
+}
+
+// ── Due Date Badge ─────────────────────────────────────
+function DueDateBadge({ task, status }: { task: Task; status: TaskStatus }) {
+  if (!task.due_date || status === 'submitted' || status === 'approved') {
+    if (task.due_date && (status === 'submitted' || status === 'approved')) return null;
+    if (!task.due_date) return null;
+  }
+  const overdue = isOverdue(task.due_date, status);
+  const dueSoon = isDueSoon(task.due_date, status);
+
+  if (overdue) {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-500/15 text-red-400 border border-red-500/20">
+        <AlertTriangle className="w-2.5 h-2.5" /> Overdue
+      </span>
+    );
+  }
+  if (dueSoon) {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20">
+        <Clock className="w-2.5 h-2.5" /> Due soon
+      </span>
+    );
+  }
+  return null;
 }
 
 // ── Auth Gate ──────────────────────────────────────────
@@ -106,50 +243,198 @@ function SignInGate({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 
-// ── Progress helpers ───────────────────────────────────
-function localDate(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
+// ── Task Complete Modal ────────────────────────────────
+function TaskCompleteModal({ task, existingProgress, onClose, onSubmit }: {
+  task: Task;
+  existingProgress: ProgressRow | undefined;
+  onClose: () => void;
+  onSubmit: (note: string, link: string) => Promise<void>;
+}) {
+  const [note, setNote] = useState(existingProgress?.completion_note || '');
+  const [link, setLink] = useState(existingProgress?.link || '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const isEdit = existingProgress?.status === 'submitted';
+  const isResubmit = existingProgress?.status === 'changes_requested';
+  const titleText = isResubmit ? 'Resubmit task' : isEdit ? 'Edit submission' : 'Mark complete';
+  const buttonText = isResubmit ? 'Resubmit' : isEdit ? 'Save changes' : 'Submit for review';
+  const minChars = 30;
+  const charCount = note.trim().length;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (charCount < minChars) {
+      setError(`Please write at least ${minChars} characters describing what you did.`);
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    await onSubmit(note.trim(), link.trim());
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#0d1320] shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center">
+              <ClipboardCheck className="w-4 h-4 text-cyan-400" />
+            </div>
+            <h3 className="text-sm font-bold text-white">{titleText}</h3>
+          </div>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+          <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
+            <p className="text-sm font-semibold text-white">{task.title}</p>
+            {task.description && <p className="text-xs text-white/40 mt-0.5">{task.description}</p>}
+            {task.due_date && (
+              <p className="text-[10px] text-white/30 mt-1 flex items-center gap-1">
+                <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(task.due_date)}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">
+              What I did <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              required
+              value={note}
+              onChange={(e) => { setNote(e.target.value); setError(''); }}
+              rows={4}
+              placeholder="Describe what you did for this task…"
+              className="w-full px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all resize-none"
+            />
+            <p className={`text-[10px] mt-1 ${charCount >= minChars ? 'text-green-400/60' : 'text-white/30'}`}>
+              {charCount}/{minChars} characters minimum
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">
+              Link <span className="text-white/20">(optional)</span>
+            </label>
+            <div className="relative">
+              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25" />
+              <input
+                type="url"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                placeholder="GitHub commit, deployed URL, screenshot, doc…"
+                className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-400 bg-red-500/[0.08] border border-red-500/15 rounded-lg px-3 py-2">{error}</p>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-3 py-2 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">
+              Cancel
+            </button>
+            <button type="submit" disabled={submitting}
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-xs hover:from-blue-400 hover:to-cyan-400 disabled:opacity-60 transition-all">
+              {submitting ? 'Submitting…' : buttonText}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
-function isCurrentWeek(week: Week): boolean {
-  if (!week.start_date || !week.end_date) return false;
-  const now = new Date();
-  const start = localDate(week.start_date);
-  const end = localDate(week.end_date);
-  end.setHours(23, 59, 59);
-  return now >= start && now <= end;
-}
+// ── Request Changes Modal ──────────────────────────────
+function RequestChangesModal({ taskTitle, onClose, onSubmit }: {
+  taskTitle: string;
+  onClose: () => void;
+  onSubmit: (comment: string) => Promise<void>;
+}) {
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-function formatDateRange(start: string | null, end: string | null): string {
-  if (!start && !end) return '';
-  const fmt = (d: string) => localDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  if (start && end) return `${fmt(start)} – ${fmt(end)}`;
-  return fmt(start || end!);
-}
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (comment.trim().length < 5) {
+      setError('Please provide a comment explaining what needs to change.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    await onSubmit(comment.trim());
+    setSubmitting(false);
+  };
 
-function fmtJournalDate(d: string): string {
-  const [y, m, dd] = d.split('-').map(Number);
-  return new Date(y, m - 1, dd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function getInitials(name: string): string {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1320] shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center">
+              <MessageSquare className="w-4 h-4 text-red-400" />
+            </div>
+            <h3 className="text-sm font-bold text-white">Request changes</h3>
+          </div>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+          <p className="text-xs text-white/40">{taskTitle}</p>
+          <div>
+            <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">
+              Comment <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              required
+              value={comment}
+              onChange={(e) => { setComment(e.target.value); setError(''); }}
+              rows={4}
+              placeholder="Explain what needs to change before this can be approved…"
+              className="w-full px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-red-500/50 transition-all resize-none"
+            />
+          </div>
+          {error && (
+            <p className="text-xs text-red-400 bg-red-500/[0.08] border border-red-500/15 rounded-lg px-3 py-2">{error}</p>
+          )}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-3 py-2 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">
+              Cancel
+            </button>
+            <button type="submit" disabled={submitting}
+              className="px-4 py-2 rounded-lg bg-red-500/80 text-white font-semibold text-xs hover:bg-red-500 disabled:opacity-60 transition-all">
+              {submitting ? 'Sending…' : 'Request changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 // ── Learner Dashboard ──────────────────────────────────
 function LearnerDashboard({
-  track, weeks, tasks, progress, onToggleTask, fullName, readOnly = false,
+  track, weeks, tasks, progress, onSubmitTask, fullName, readOnly = false,
   journalEntries, onJumpToJournal,
 }: {
   track: Track;
   weeks: Week[];
   tasks: Task[];
   progress: Map<string, ProgressRow>;
-  onToggleTask: (taskId: string, currentStatus: TaskStatus) => void;
+  onSubmitTask: (taskId: string, note: string, link: string) => Promise<void>;
   fullName: string;
   readOnly?: boolean;
   learnerId: string;
@@ -158,10 +443,20 @@ function LearnerDashboard({
 }) {
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const totalTasks = tasks.length;
-  const doneCount = Array.from(progress.values()).filter((p) => p.status === 'done').length;
-  const pct = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0;
-  const noop = () => {};
-  const handleToggle = readOnly ? noop : onToggleTask;
+  const approvedCount = Array.from(progress.values()).filter((p) => p.status === 'approved').length;
+  const submittedCount = Array.from(progress.values()).filter((p) => p.status === 'submitted').length;
+  const pct = totalTasks > 0 ? Math.round((approvedCount / totalTasks) * 100) : 0;
+
+  let overdueCount = 0;
+  let dueThisWeekCount = 0;
+  for (const task of tasks) {
+    const p = progress.get(task.id);
+    const status = p?.status || 'not_started';
+    if (isOverdue(task.due_date, status)) overdueCount++;
+    if (isDueThisWeek(task.due_date, status)) dueThisWeekCount++;
+  }
+
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
   const entryCountByWeek = getEntryCountByWeek(journalEntries);
 
   return (
@@ -175,6 +470,33 @@ function LearnerDashboard({
         <h1 className="text-2xl font-bold text-white mb-2">{track.title}</h1>
         {track.description && <p className="text-sm text-white/45 leading-relaxed max-w-2xl">{track.description}</p>}
       </div>
+
+      {/* Summary counts */}
+      {!readOnly && (
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className={`rounded-xl border p-4 ${overdueCount > 0 ? 'border-red-500/20 bg-red-500/[0.04]' : 'border-white/[0.08] bg-white/[0.02]'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className={`w-3.5 h-3.5 ${overdueCount > 0 ? 'text-red-400' : 'text-white/25'}`} />
+              <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wide">Overdue</span>
+            </div>
+            <p className={`text-2xl font-bold ${overdueCount > 0 ? 'text-red-400' : 'text-white/50'}`}>{overdueCount}</p>
+          </div>
+          <div className={`rounded-xl border p-4 ${dueThisWeekCount > 0 ? 'border-amber-500/20 bg-amber-500/[0.04]' : 'border-white/[0.08] bg-white/[0.02]'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Hourglass className={`w-3.5 h-3.5 ${dueThisWeekCount > 0 ? 'text-amber-400' : 'text-white/25'}`} />
+              <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wide">Due this week</span>
+            </div>
+            <p className={`text-2xl font-bold ${dueThisWeekCount > 0 ? 'text-amber-400' : 'text-white/50'}`}>{dueThisWeekCount}</p>
+          </div>
+          <div className={`rounded-xl border p-4 ${submittedCount > 0 ? 'border-cyan-500/20 bg-cyan-500/[0.04]' : 'border-white/[0.08] bg-white/[0.02]'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <ClipboardCheck className={`w-3.5 h-3.5 ${submittedCount > 0 ? 'text-cyan-400' : 'text-white/25'}`} />
+              <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wide">Awaiting review</span>
+            </div>
+            <p className={`text-2xl font-bold ${submittedCount > 0 ? 'text-cyan-400' : 'text-white/50'}`}>{submittedCount}</p>
+          </div>
+        </div>
+      )}
 
       {/* Overall progress bar */}
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 mb-8">
@@ -192,9 +514,9 @@ function LearnerDashboard({
           />
         </div>
         <div className="flex items-center gap-4 mt-3 text-[10px] text-white/35">
-          <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-400" /> {doneCount} done</span>
-          <span className="flex items-center gap-1"><PlayCircle className="w-3 h-3 text-amber-400" /> {Array.from(progress.values()).filter((p) => p.status === 'in_progress').length} in progress</span>
-          <span className="flex items-center gap-1"><Circle className="w-3 h-3 text-white/30" /> {totalTasks - doneCount} remaining</span>
+          <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-400" /> {approvedCount} approved</span>
+          {submittedCount > 0 && <span className="flex items-center gap-1"><Send className="w-3 h-3 text-cyan-400" /> {submittedCount} awaiting review</span>}
+          <span className="flex items-center gap-1"><Circle className="w-3 h-3 text-white/30" /> {totalTasks - approvedCount - submittedCount} remaining</span>
         </div>
       </div>
 
@@ -202,8 +524,8 @@ function LearnerDashboard({
       <div className="space-y-4">
         {sortedWeeks.map((week) => {
           const weekTasks = tasks.filter((t) => t.week_id === week.id).sort((a, b) => a.sort_order - b.sort_order);
-          const weekDone = weekTasks.filter((t) => progress.get(t.id)?.status === 'done').length;
-          const weekPct = weekTasks.length > 0 ? Math.round((weekDone / weekTasks.length) * 100) : 0;
+          const weekApproved = weekTasks.filter((t) => progress.get(t.id)?.status === 'approved').length;
+          const weekPct = weekTasks.length > 0 ? Math.round((weekApproved / weekTasks.length) * 100) : 0;
           const current = isCurrentWeek(week);
 
           return (
@@ -237,7 +559,7 @@ function LearnerDashboard({
                     </span>
                   )}
                   <span className={`text-xs font-semibold ${weekPct === 100 ? 'text-green-400' : 'text-white/40'}`}>
-                    {weekDone}/{weekTasks.length}
+                    {weekApproved}/{weekTasks.length}
                   </span>
                 </div>
               </div>
@@ -254,42 +576,104 @@ function LearnerDashboard({
                 </div>
               )}
 
-              {/* Task checklist */}
+              {/* Task list */}
               <div className="px-5 py-3">
                 {weekTasks.length === 0 ? (
                   <p className="text-xs text-white/30 py-2">No tasks for this week yet.</p>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {weekTasks.map((task) => {
                       const p = progress.get(task.id);
                       const status = p?.status || 'not_started';
+                      const daysLate = p?.submitted_at && task.due_date ? getDaysLate(task.due_date, p.submitted_at) : 0;
+
                       return (
-                        <button
+                        <div
                           key={task.id}
-                          onClick={() => handleToggle(task.id, status)}
-                          disabled={readOnly}
-                          className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all text-left group ${
-                            readOnly ? 'cursor-default' : 'hover:bg-white/[0.04]'
-                          }`}
+                          className="rounded-lg px-3 py-3 transition-all"
                         >
-                          <span className="flex-shrink-0 mt-0.5">
-                            {status === 'done' ? (
-                              <CheckCircle2 className="w-4 h-4 text-green-400 group-hover:scale-110 transition-transform" />
-                            ) : status === 'in_progress' ? (
-                              <PlayCircle className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                            ) : (
-                              <Circle className="w-4 h-4 text-white/25 group-hover:text-white/40 transition-colors" />
-                            )}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm leading-snug ${
-                              status === 'done' ? 'text-white/40 line-through' : 'text-white/80'
-                            }`}>{task.title}</p>
-                            {task.description && (
-                              <p className="text-xs text-white/35 mt-0.5 leading-relaxed">{task.description}</p>
-                            )}
+                          <div className="flex items-start gap-3">
+                            <span className="flex-shrink-0 mt-0.5">
+                              <StatusIcon status={status} />
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm leading-snug ${
+                                status === 'approved' ? 'text-white/40 line-through' : 'text-white/80'
+                              }`}>{task.title}</p>
+                              {task.description && (
+                                <p className="text-xs text-white/35 mt-0.5 leading-relaxed">{task.description}</p>
+                              )}
+
+                              {/* Due date + badges */}
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                {task.due_date && (
+                                  <span className="text-[10px] text-white/30 flex items-center gap-1">
+                                    <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(task.due_date)}
+                                  </span>
+                                )}
+                                <DueDateBadge task={task} status={status} />
+                              </div>
+
+                              {/* Submitted: show note, link, late flag */}
+                              {(status === 'submitted' || status === 'approved' || status === 'changes_requested') && p?.completion_note && (
+                                <div className="mt-2 rounded-lg bg-white/[0.03] border border-white/[0.06] p-3 space-y-1.5">
+                                  <div className="flex items-start gap-2">
+                                    <FileText className="w-3 h-3 text-white/30 flex-shrink-0 mt-0.5" />
+                                    <p className="text-xs text-white/60 leading-relaxed whitespace-pre-wrap">{p.completion_note}</p>
+                                  </div>
+                                  {p.link && (
+                                    <a href={p.link} target="_blank" rel="noopener noreferrer"
+                                       className="flex items-center gap-1.5 text-[11px] text-cyan-400/70 hover:text-cyan-400 transition-colors">
+                                      <Link2 className="w-3 h-3" /> {p.link}
+                                    </a>
+                                  )}
+                                  {p.submitted_at && (
+                                    <p className="text-[10px] text-white/30 flex items-center gap-1">
+                                      <Send className="w-2.5 h-2.5" />
+                                      Submitted {formatSubmittedDate(p.submitted_at)}
+                                      {daysLate > 0 && <span className="text-red-400/80 ml-1">({daysLate} {daysLate === 1 ? 'day' : 'days'} late)</span>}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Changes requested: show review comment */}
+                              {status === 'changes_requested' && p?.review_comment && (
+                                <div className="mt-2 rounded-lg bg-red-500/[0.06] border border-red-500/15 p-3">
+                                  <div className="flex items-start gap-2">
+                                    <MessageSquare className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                      <p className="text-[10px] font-semibold text-red-400/80 uppercase tracking-wide mb-1">Review feedback</p>
+                                      <p className="text-xs text-white/60 leading-relaxed">{p.review_comment}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Action buttons */}
+                              {!readOnly && status !== 'approved' && status !== 'submitted' && (
+                                <button
+                                  onClick={() => setActiveTask(task)}
+                                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/25 text-blue-300 text-xs font-semibold hover:bg-blue-500/25 transition-all"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  {status === 'changes_requested' ? 'Resubmit' : 'Mark complete'}
+                                </button>
+                              )}
+                              {!readOnly && status === 'submitted' && (
+                                <button
+                                  onClick={() => setActiveTask(task)}
+                                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/10 text-white/50 text-xs font-semibold hover:text-white/80 hover:bg-white/[0.08] transition-all"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" /> Edit note
+                                </button>
+                              )}
+                              {readOnly && status === 'changes_requested' && p?.review_comment && (
+                                <p className="text-[10px] text-red-400/60 mt-1">Changes requested — learner can resubmit.</p>
+                              )}
+                            </div>
                           </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -299,6 +683,19 @@ function LearnerDashboard({
           );
         })}
       </div>
+
+      {/* Task completion modal */}
+      {activeTask && (
+        <TaskCompleteModal
+          task={activeTask}
+          existingProgress={progress.get(activeTask.id)}
+          onClose={() => setActiveTask(null)}
+          onSubmit={async (note, link) => {
+            await onSubmitTask(activeTask.id, note, link);
+            setActiveTask(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -420,9 +817,10 @@ function InviteLearnerModal({ onClose, onInvited }: {
   );
 }
 
-// ── Admin Dashboard ────────────────────────────────────
+// ── Admin Learner Detail Tabs ──────────────────────────
 function LearnerDetailTabs({
   selectedLearner, selectedLearnerInfo, weeks, tasks, learnerProgress, adminId,
+  onApproveTask, onRequestChanges, onUpdateDueDate,
 }: {
   selectedLearner: string;
   selectedLearnerInfo: LearnerInfo;
@@ -430,29 +828,37 @@ function LearnerDetailTabs({
   tasks: Task[];
   learnerProgress: ProgressRow[];
   adminId: string;
+  onApproveTask: (progressId: string) => Promise<void>;
+  onRequestChanges: (progressId: string, comment: string) => Promise<void>;
+  onUpdateDueDate: (taskId: string, dueDate: string) => Promise<void>;
 }) {
   const hasJournal = !!selectedLearnerInfo.latestEntryDate;
   const [detailTab, setDetailTab] = useState<'progress' | 'journal'>(hasJournal ? 'journal' : 'progress');
+  const [requestChangesFor, setRequestChangesFor] = useState<ProgressRow | null>(null);
   const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
 
+  const approvedCount = learnerProgress.filter((p) => p.status === 'approved').length;
+  const submittedCount = learnerProgress.filter((p) => p.status === 'submitted').length;
+  const pct = tasks.length > 0 ? Math.round((approvedCount / tasks.length) * 100) : 0;
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
-      {/* Back button */}
-      <button
-        onClick={() => {}}
-        className="hidden"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" />
-      </button>
-
       <div className="flex items-center gap-3 mb-2">
         <Users className="w-4 h-4 text-cyan-400" />
         <h1 className="text-xl font-bold text-white">{selectedLearnerInfo.fullName}</h1>
       </div>
       <p className="text-sm text-white/40 mb-4">
-        {selectedLearnerInfo.doneCount} of {tasks.length} tasks complete ({Math.round((selectedLearnerInfo.doneCount / Math.max(tasks.length, 1)) * 100)}%)
+        {approvedCount} of {tasks.length} tasks approved ({pct}%){submittedCount > 0 && ` · ${submittedCount} awaiting review`}
+        {selectedLearnerInfo.overdueCount > 0 && <span className="text-red-400"> · {selectedLearnerInfo.overdueCount} overdue</span>}
       </p>
+
+      {/* Progress bar */}
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 mb-6">
+        <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all duration-500" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
 
       {/* Tab toggle */}
       <div className="inline-flex items-center gap-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08] p-0.5 mb-6">
@@ -478,7 +884,7 @@ function LearnerDetailTabs({
         <div className="space-y-4">
           {sortedWeeks.map((week) => {
             const weekTasks = tasks.filter((t) => t.week_id === week.id).sort((a, b) => a.sort_order - b.sort_order);
-            const weekDone = weekTasks.filter((t) => progressMap.get(t.id)?.status === 'done').length;
+            const weekApproved = weekTasks.filter((t) => progressMap.get(t.id)?.status === 'approved').length;
             return (
               <div key={week.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
                 <div className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.05]">
@@ -486,20 +892,99 @@ function LearnerDetailTabs({
                     {week.week_number}
                   </div>
                   <h3 className="text-sm font-bold text-white flex-1">{week.title}</h3>
-                  <span className="text-xs font-semibold text-white/40">{weekDone}/{weekTasks.length}</span>
+                  <span className="text-xs font-semibold text-white/40">{weekApproved}/{weekTasks.length}</span>
                 </div>
-                <div className="px-5 py-2">
+                <div className="px-5 py-2 divide-y divide-white/[0.04]">
                   {weekTasks.map((task) => {
                     const p = progressMap.get(task.id);
                     const status = p?.status || 'not_started';
+                    const daysLate = p?.submitted_at && task.due_date ? getDaysLate(task.due_date, p.submitted_at) : 0;
+
                     return (
-                      <div key={task.id} className="flex items-center gap-3 py-2">
-                        {status === 'done' ? <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
-                         : status === 'in_progress' ? <PlayCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                         : <Circle className="w-4 h-4 text-white/20 flex-shrink-0" />}
-                        <span className={`text-sm ${status === 'done' ? 'text-white/40 line-through' : 'text-white/70'}`}>
-                          {task.title}
-                        </span>
+                      <div key={task.id} className="py-3">
+                        <div className="flex items-start gap-3">
+                          <span className="flex-shrink-0 mt-0.5">
+                            <StatusIcon status={status} />
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${status === 'approved' ? 'text-white/40 line-through' : 'text-white/70'}`}>
+                              {task.title}
+                            </p>
+                            {task.description && (
+                              <p className="text-xs text-white/35 mt-0.5">{task.description}</p>
+                            )}
+
+                            {/* Due date (editable by admin) */}
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <input
+                                type="date"
+                                value={task.due_date || ''}
+                                onChange={(e) => onUpdateDueDate(task.id, e.target.value)}
+                                className="bg-white/[0.05] border border-white/10 text-white/60 text-[11px] rounded px-1.5 py-0.5 focus:outline-none focus:border-blue-500/50 transition-all"
+                              />
+                              <DueDateBadge task={task} status={status} />
+                            </div>
+
+                            {/* Submitted/approved/changes: show note */}
+                            {(status === 'submitted' || status === 'approved' || status === 'changes_requested') && p?.completion_note && (
+                              <div className="mt-2 rounded-lg bg-white/[0.03] border border-white/[0.06] p-3 space-y-1.5">
+                                <div className="flex items-start gap-2">
+                                  <FileText className="w-3 h-3 text-white/30 flex-shrink-0 mt-0.5" />
+                                  <p className="text-xs text-white/60 leading-relaxed whitespace-pre-wrap">{p.completion_note}</p>
+                                </div>
+                                {p.link && (
+                                  <a href={p.link} target="_blank" rel="noopener noreferrer"
+                                     className="flex items-center gap-1.5 text-[11px] text-cyan-400/70 hover:text-cyan-400 transition-colors">
+                                    <Link2 className="w-3 h-3" /> {p.link}
+                                  </a>
+                                )}
+                                {p.submitted_at && (
+                                  <p className="text-[10px] text-white/30 flex items-center gap-1">
+                                    <Send className="w-2.5 h-2.5" />
+                                    Submitted {formatSubmittedDate(p.submitted_at)}
+                                    {daysLate > 0 && <span className="text-red-400/80 ml-1">({daysLate} {daysLate === 1 ? 'day' : 'days'} late)</span>}
+                                  </p>
+                                )}
+                                {status === 'approved' && p.reviewed_at && (
+                                  <p className="text-[10px] text-green-400/60 flex items-center gap-1">
+                                    <CheckCircle2 className="w-2.5 h-2.5" /> Approved {formatSubmittedDate(p.reviewed_at)}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Changes requested: show review comment */}
+                            {status === 'changes_requested' && p?.review_comment && (
+                              <div className="mt-2 rounded-lg bg-red-500/[0.06] border border-red-500/15 p-3">
+                                <div className="flex items-start gap-2">
+                                  <MessageSquare className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="text-[10px] font-semibold text-red-400/80 uppercase tracking-wide mb-1">Changes requested</p>
+                                    <p className="text-xs text-white/60 leading-relaxed">{p.review_comment}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Admin action buttons for submitted tasks */}
+                            {status === 'submitted' && p && (
+                              <div className="flex items-center gap-2 mt-2">
+                                <button
+                                  onClick={() => onApproveTask(p.id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/15 border border-green-500/25 text-green-300 text-xs font-semibold hover:bg-green-500/25 transition-all"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+                                </button>
+                                <button
+                                  onClick={() => setRequestChangesFor(p)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/25 text-red-300 text-xs font-semibold hover:bg-red-500/25 transition-all"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" /> Request changes
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
@@ -511,13 +996,26 @@ function LearnerDetailTabs({
       ) : (
         <AdminJournal learnerId={selectedLearner} weeks={weeks} adminId={adminId} />
       )}
+
+      {/* Request changes modal */}
+      {requestChangesFor && (
+        <RequestChangesModal
+          taskTitle={tasks.find((t) => t.id === requestChangesFor.task_id)?.title || 'Task'}
+          onClose={() => setRequestChangesFor(null)}
+          onSubmit={async (comment) => {
+            await onRequestChanges(requestChangesFor.id, comment);
+            setRequestChangesFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
+// ── Admin Dashboard ────────────────────────────────────
 function AdminDashboard({
   learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
-  onInviteLearner,
+  onInviteLearner, onApproveTask, onRequestChanges, onUpdateDueDate,
 }: {
   learners: LearnerInfo[];
   weeks: Week[];
@@ -529,14 +1027,16 @@ function AdminDashboard({
   learnerJournalEntries: JournalEntry[];
   adminId: string;
   onInviteLearner: () => void;
+  onApproveTask: (progressId: string) => Promise<void>;
+  onRequestChanges: (progressId: string, comment: string) => Promise<void>;
+  onUpdateDueDate: (taskId: string, dueDate: string) => Promise<void>;
 }) {
-  const sortedLearners = [...learners].sort((a, b) => b.doneCount - a.doneCount);
+  const sortedLearners = [...learners].sort((a, b) => b.approvedCount - a.approvedCount);
   const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
 
   if (selectedLearner && selectedLearnerInfo) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
-        {/* Back button */}
         <button
           onClick={() => onSelectLearner('')}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/10 text-xs text-white/60 hover:text-white/90 hover:bg-white/[0.08] mb-6 transition-all"
@@ -550,6 +1050,9 @@ function AdminDashboard({
           tasks={tasks}
           learnerProgress={learnerProgress}
           adminId={adminId}
+          onApproveTask={onApproveTask}
+          onRequestChanges={onRequestChanges}
+          onUpdateDueDate={onUpdateDueDate}
         />
       </div>
     );
@@ -579,7 +1082,7 @@ function AdminDashboard({
       ) : (
         <div className="space-y-2">
           {sortedLearners.map((learner) => {
-            const pct = tasks.length > 0 ? Math.round((learner.doneCount / tasks.length) * 100) : 0;
+            const pct = tasks.length > 0 ? Math.round((learner.approvedCount / tasks.length) * 100) : 0;
             return (
               <button
                 key={learner.id}
@@ -593,14 +1096,26 @@ function AdminDashboard({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">{learner.fullName}</p>
-                  <p className="text-[10px] text-white/30 mt-0.5">
-                    {learner.doneCount}/{tasks.length} tasks{learner.currentWeek ? ` · Week ${learner.currentWeek}` : ''}{learner.latestEntryDate ? ` · Journal: ${fmtJournalDate(learner.latestEntryDate)}` : ' · No journal entries yet'}
-                  </p>
+                  <div className="flex items-center gap-3 mt-0.5 text-[10px]">
+                    <span className="text-white/30">
+                      {learner.approvedCount}/{tasks.length} approved{learner.currentWeek ? ` · Week ${learner.currentWeek}` : ''}
+                    </span>
+                    {learner.awaitingReviewCount > 0 && (
+                      <span className="flex items-center gap-0.5 text-cyan-400/70">
+                        <ClipboardCheck className="w-2.5 h-2.5" /> {learner.awaitingReviewCount} review
+                      </span>
+                    )}
+                    {learner.overdueCount > 0 && (
+                      <span className="flex items-center gap-0.5 text-red-400">
+                        <AlertTriangle className="w-2.5 h-2.5" /> {learner.overdueCount} overdue
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <div className="w-24 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+                      className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -673,7 +1188,7 @@ export default function LearnPortal() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // ── Effect 1: Load curriculum once per session (depends only on authed) ──
+  // ── Effect 1: Load curriculum once per session ──
   useEffect(() => {
     if (!authed) return;
     let cancelled = false;
@@ -699,18 +1214,16 @@ export default function LearnPortal() {
     return () => { cancelled = true; };
   }, [authed]);
 
-  // ── Effect 2: Load progress after curriculum is loaded (depends on track, not callbacks) ──
+  // ── Effect 2: Load progress after curriculum is loaded ──
   useEffect(() => {
     if (!track || tasks.length === 0) return;
     let cancelled = false;
     if (isAdmin) {
       (async () => {
-        // 1. Fetch all trainees (including those with no progress)
         const { data: trainees } = await supabase.rpc('lp_list_trainees');
         if (cancelled) return;
         const traineeRows = (trainees || []) as { id: string; full_name: string }[];
 
-        // 2. Fetch all progress
         const { data: allProgress } = await supabase.from('lp_progress').select('*');
         if (cancelled) return;
         const rows = (allProgress || []) as ProgressRow[];
@@ -723,20 +1236,28 @@ export default function LearnPortal() {
 
         const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
 
-        // 3. Build learner infos from ALL trainees, not just those with progress
         const learnerInfos: LearnerInfo[] = traineeRows.map((t) => {
           const pRows = byLearner.get(t.id) || [];
-          const doneCount = pRows.filter((p) => p.status === 'done').length;
+          const approvedCount = pRows.filter((p) => p.status === 'approved').length;
+          const awaitingReviewCount = pRows.filter((p) => p.status === 'submitted').length;
+
+          let overdueCount = 0;
+          for (const task of tasks) {
+            const p = pRows.find((pr) => pr.task_id === task.id);
+            const status = p?.status || 'not_started';
+            if (isOverdue(task.due_date, status)) overdueCount++;
+          }
+
           let currentWeek: number | null = null;
           for (const w of sortedWeeks) {
             const wTasks = tasks.filter((tk) => tk.week_id === w.id);
-            const allDone = wTasks.every((tk) => pRows.find((p) => p.task_id === tk.id && p.status === 'done'));
-            if (!allDone && wTasks.length > 0) {
+            const allApproved = wTasks.every((tk) => pRows.find((p) => p.task_id === tk.id && p.status === 'approved'));
+            if (!allApproved && wTasks.length > 0) {
               currentWeek = w.week_number;
               break;
             }
           }
-          if (currentWeek === null && doneCount > 0 && doneCount < tasks.length) {
+          if (currentWeek === null && approvedCount > 0 && approvedCount < tasks.length) {
             for (const w of sortedWeeks) {
               const wTasks = tasks.filter((tk) => tk.week_id === w.id);
               const hasProgress = wTasks.some((tk) => pRows.find((p) => p.task_id === tk.id));
@@ -746,16 +1267,18 @@ export default function LearnPortal() {
               }
             }
           }
+
           return {
             id: t.id,
             fullName: t.full_name || 'Unknown learner',
-            doneCount,
+            approvedCount,
+            overdueCount,
+            awaitingReviewCount,
             currentWeek,
             latestEntryDate: null,
           };
         });
 
-        // 4. Load all journal entries for latest dates
         const { data: allJournal } = await supabase
           .from('lp_journal_entries')
           .select('*')
@@ -781,7 +1304,6 @@ export default function LearnPortal() {
         if (cancelled) return;
         const rows = (data || []) as ProgressRow[];
         setProgressMap(new Map(rows.map((r) => [r.task_id, r])));
-        // Load journal entries for this learner
         const { data: jData } = await supabase
           .from('lp_journal_entries')
           .select('*')
@@ -799,40 +1321,66 @@ export default function LearnPortal() {
     setLearnerProgress((data || []) as ProgressRow[]);
   }, []);
 
-  const handleToggleTask = async (taskId: string, currentStatus: TaskStatus) => {
-    const newStatus: TaskStatus = currentStatus === 'done' ? 'not_started' : currentStatus === 'not_started' ? 'in_progress' : 'done';
-    const completedAt = newStatus === 'done' ? new Date().toISOString() : null;
+  // ── Task submission handler ──
+  const handleSubmitTask = async (taskId: string, note: string, link: string) => {
+    const existing = progressMap.get(taskId);
+    const now = new Date().toISOString();
+    const payload: Record<string, unknown> = {
+      status: 'submitted',
+      completion_note: note,
+      link: link || null,
+    };
+
+    // Update submitted_at for new submissions and resubmissions, but not for edits
+    if (!existing || existing.status !== 'submitted') {
+      payload.submitted_at = now;
+    }
 
     // Optimistic update
     setProgressMap((prev) => {
       const next = new Map(prev);
-      const existing = next.get(taskId);
       if (existing) {
-        next.set(taskId, { ...existing, status: newStatus, completed_at: completedAt });
+        next.set(taskId, { ...existing, ...payload } as ProgressRow);
       } else {
         next.set(taskId, {
           id: 'temp',
           learner_id: userId,
           task_id: taskId,
-          status: newStatus,
-          completed_at: completedAt,
+          status: 'submitted',
+          completed_at: null,
+          completion_note: note,
+          link: link || null,
+          submitted_at: payload.submitted_at as string,
+          reviewed_at: null,
+          review_comment: null,
         });
       }
       return next;
     });
 
-    // Persist to database (no loading spinner — this is a background save)
-    const existing = progressMap.get(taskId);
     if (existing && existing.id !== 'temp') {
-      await supabase.from('lp_progress').update({ status: newStatus, completed_at: completedAt }).eq('id', existing.id);
+      const { error } = await supabase.from('lp_progress').update(payload).eq('id', existing.id);
+      if (error) {
+        // Revert on error
+        setProgressMap((prev) => {
+          const next = new Map(prev);
+          next.set(taskId, existing);
+          return next;
+        });
+      }
     } else {
-      const { data } = await supabase.from('lp_progress').insert({
+      const { data, error } = await supabase.from('lp_progress').insert({
         learner_id: userId,
         task_id: taskId,
-        status: newStatus,
-        completed_at: completedAt,
+        ...payload,
       }).select('*');
-      if (data && data.length > 0) {
+      if (error) {
+        setProgressMap((prev) => {
+          const next = new Map(prev);
+          next.delete(taskId);
+          return next;
+        });
+      } else if (data && data.length > 0) {
         setProgressMap((prev) => {
           const next = new Map(prev);
           next.set(taskId, data[0] as ProgressRow);
@@ -840,6 +1388,56 @@ export default function LearnPortal() {
         });
       }
     }
+  };
+
+  // ── Admin: approve task ──
+  const handleApproveTask = async (progressId: string) => {
+    const now = new Date().toISOString();
+    await supabase.from('lp_progress').update({ status: 'approved', reviewed_at: now }).eq('id', progressId);
+    if (selectedLearner) {
+      await loadSelectedLearnerProgress(selectedLearner);
+      // Also update the learner list counts
+      setLearners((prev) => prev.map((l) => {
+        if (l.id !== selectedLearner) return l;
+        const newProgress = learnerProgress.map((p) =>
+          p.id === progressId ? { ...p, status: 'approved' as TaskStatus, reviewed_at: now } : p
+        );
+        return {
+          ...l,
+          approvedCount: newProgress.filter((p) => p.status === 'approved').length,
+          awaitingReviewCount: newProgress.filter((p) => p.status === 'submitted').length,
+        };
+      }));
+    }
+  };
+
+  // ── Admin: request changes ──
+  const handleRequestChanges = async (progressId: string, comment: string) => {
+    const now = new Date().toISOString();
+    await supabase.from('lp_progress').update({
+      status: 'changes_requested',
+      review_comment: comment,
+      reviewed_at: now,
+    }).eq('id', progressId);
+    if (selectedLearner) {
+      await loadSelectedLearnerProgress(selectedLearner);
+      setLearners((prev) => prev.map((l) => {
+        if (l.id !== selectedLearner) return l;
+        const newProgress = learnerProgress.map((p) =>
+          p.id === progressId ? { ...p, status: 'changes_requested' as TaskStatus, review_comment: comment, reviewed_at: now } : p
+        );
+        return {
+          ...l,
+          awaitingReviewCount: newProgress.filter((p) => p.status === 'submitted').length,
+        };
+      }));
+    }
+  };
+
+  // ── Admin: update due date ──
+  const handleUpdateDueDate = async (taskId: string, dueDate: string) => {
+    await supabase.from('lp_tasks').update({ due_date: dueDate || null }).eq('id', taskId);
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, due_date: dueDate || null } : t));
   };
 
   const handleSelectLearner = (learnerId: string) => {
@@ -926,7 +1524,6 @@ export default function LearnPortal() {
             </div>
           </div>
 
-          {/* Admin: learner list or learner detail */}
           {adminView === 'learners' && (
             <AdminDashboard
               learners={learners}
@@ -939,10 +1536,12 @@ export default function LearnPortal() {
               learnerJournalEntries={learnerJournalEntries}
               adminId={userId}
               onInviteLearner={() => setShowInviteModal(true)}
+              onApproveTask={handleApproveTask}
+              onRequestChanges={handleRequestChanges}
+              onUpdateDueDate={handleUpdateDueDate}
             />
           )}
 
-          {/* Admin: read-only track preview */}
           {adminView === 'preview' && (
             <>
               <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-2">
@@ -955,7 +1554,7 @@ export default function LearnPortal() {
                 weeks={weeks}
                 tasks={tasks}
                 progress={new Map()}
-                onToggleTask={() => {}}
+                onSubmitTask={async () => {}}
                 fullName={fullName}
                 readOnly
                 learnerId={userId}
@@ -997,7 +1596,7 @@ export default function LearnPortal() {
               weeks={weeks}
               tasks={tasks}
               progress={progressMap}
-              onToggleTask={handleToggleTask}
+              onSubmitTask={handleSubmitTask}
               fullName={fullName}
               learnerId={userId}
               journalEntries={journalEntries}
@@ -1019,7 +1618,6 @@ export default function LearnPortal() {
         <InviteLearnerModal
           onClose={() => setShowInviteModal(false)}
           onInvited={() => {
-            // Reload learners list to include the new invitee
             if (track) {
               const reload = async () => {
                 const { data: trainees } = await supabase.rpc('lp_list_trainees');
@@ -1028,7 +1626,7 @@ export default function LearnPortal() {
                   const existingIds = new Set(prev.map((p) => p.id));
                   const newOnes = traineeRows
                     .filter((t) => !existingIds.has(t.id))
-                    .map((t) => ({ id: t.id, fullName: t.full_name || 'Unknown learner', doneCount: 0, currentWeek: null, latestEntryDate: null }));
+                    .map((t) => ({ id: t.id, fullName: t.full_name || 'Unknown learner', approvedCount: 0, overdueCount: 0, awaitingReviewCount: 0, currentWeek: null, latestEntryDate: null }));
                   return [...prev, ...newOnes];
                 });
               };
