@@ -21,7 +21,7 @@ import {
   CoachFeedbackModal, StatusBadge, KnowledgeCheckCard, InterviewPracticeCard,
   AdminQuizSummary, AdminInterviewSummary,
 } from '../components/learnCoachComponents';
-import type { QuizAttempt, InterviewPracticeRow, CoachFeedback } from '../lib/learnCoach';
+import { generateInterviewQuestion, gradeInterview, type QuizAttempt, type InterviewPracticeRow, type CoachFeedback } from '../lib/learnCoach';
 
 // ── Types ──────────────────────────────────────────────
 type TaskStatus = 'not_started' | 'in_progress' | 'submitted' | 'approved' | 'changes_requested';
@@ -1222,6 +1222,11 @@ function LearnerDashboard({
             setCoachModal(null);
             setActiveTask(null);
           }}
+          onSkipWithoutFeedback={async () => {
+            await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link);
+            setCoachModal(null);
+            setActiveTask(null);
+          }}
         />
       )}
     </div>
@@ -1350,7 +1355,7 @@ function LearnerDetailTabs({
   selectedLearner, selectedLearnerInfo, weeks, tasks, learnerProgress, adminId,
   onApproveTask, onRequestChanges, onUpdateStartDate,
   resources, onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
-  learnerQuizAttempts, learnerInterviewPractice,
+  learnerQuizAttempts, learnerInterviewPractice, learnerJournalEntries,
 }: {
   selectedLearner: string;
   selectedLearnerInfo: LearnerInfo;
@@ -1358,6 +1363,7 @@ function LearnerDetailTabs({
   tasks: Task[];
   learnerProgress: ProgressRow[];
   adminId: string;
+  learnerJournalEntries: JournalEntry[];
   onApproveTask: (progressId: string) => Promise<void>;
   onRequestChanges: (progressId: string, comment: string) => Promise<void>;
   onUpdateStartDate: (learnerId: string, startDate: string) => Promise<void>;
@@ -1377,6 +1383,7 @@ function LearnerDetailTabs({
   const [requestChangesFor, setRequestChangesFor] = useState<ProgressRow | null>(null);
   const [startDateInput, setStartDateInput] = useState(selectedLearnerInfo.startDate || '');
   const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
+  const [showInterviewPreview, setShowInterviewPreview] = useState(false);
   const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
 
@@ -1633,6 +1640,19 @@ function LearnerDetailTabs({
         <AdminJournal learnerId={selectedLearner} weeks={weeks} adminId={adminId} />
       ) : (
         <div className="space-y-4">
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mic className="w-4 h-4 text-violet-400" />
+                <span className="text-sm font-semibold text-white">Preview Interview Practice</span>
+              </div>
+              <button onClick={() => setShowInterviewPreview(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/15 border border-violet-500/25 text-violet-300 text-xs font-semibold hover:bg-violet-500/25 transition-all">
+                <Mic className="w-3.5 h-3.5" /> Try it
+              </button>
+            </div>
+            <p className="text-xs text-white/40 mt-2">Generate a practice interview question for this learner and grade a sample answer. No data is saved.</p>
+          </div>
           {sortedWeeks.map((week) => {
             const weekQuiz = learnerQuizAttempts.filter((a) => a.week_id === week.id);
             if (weekQuiz.length === 0) return null;
@@ -1654,6 +1674,18 @@ function LearnerDetailTabs({
             <AdminInterviewSummary interviewHistory={learnerInterviewPractice} />
           </div>
         </div>
+      )}
+
+      {/* Admin interview practice preview modal */}
+      {showInterviewPreview && (
+        <AdminInterviewPreviewModal
+          learnerId={selectedLearner}
+          journalEntries={learnerJournalEntries}
+          approvedTasks={learnerProgress
+            .filter((p) => p.status === 'approved')
+            .map((p) => ({ title: tasks.find((t) => t.id === p.task_id)?.title || 'Task', completion_note: p.completion_note || '' }))}
+          onClose={() => setShowInterviewPreview(false)}
+        />
       )}
 
       {/* Resource edit modal */}
@@ -1684,6 +1716,145 @@ function LearnerDetailTabs({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ── Admin Interview Preview Modal ───────────────────────
+function AdminInterviewPreviewModal({ learnerId, journalEntries, approvedTasks, onClose }: {
+  learnerId: string;
+  journalEntries: JournalEntry[];
+  approvedTasks: Array<{ title: string; completion_note: string }>;
+  onClose: () => void;
+}) {
+  const [state, setState] = useState<'loading_q' | 'answering' | 'grading' | 'result' | 'error'>('loading_q');
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [result, setResult] = useState<{ scores: { clarity: number; technical_depth: number; use_of_specifics: number }; feedback: string; suggested_version: string } | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { question: q } = await generateInterviewQuestion({
+          journal_entries: journalEntries.slice(0, 5).map((j) => ({ entry_text: j.entry_text, entry_date: j.entry_date })),
+          approved_tasks: approvedTasks.slice(0, 10),
+          target_learner_id: learnerId,
+        });
+        if (cancelled) return;
+        setQuestion(q);
+        setState('answering');
+      } catch (err) {
+        if (cancelled) return;
+        setError((err as Error).message);
+        setState('error');
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSubmit = async () => {
+    if (answer.trim().length < 20) {
+      setError('Please write at least 20 characters.');
+      return;
+    }
+    setState('grading');
+    setError('');
+    try {
+      const grade = await gradeInterview({ question, answer: answer.trim() });
+      setResult(grade);
+      setState('result');
+    } catch (err) {
+      setError((err as Error).message);
+      setState('answering');
+    }
+  };
+
+  const scoreColor = (s: number) => s >= 4 ? 'text-green-400' : s >= 3 ? 'text-amber-400' : 'text-red-400';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#0d1320] shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] sticky top-0 bg-[#0d1320] z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center">
+              <Mic className="w-4 h-4 text-violet-300" />
+            </div>
+            <h3 className="text-sm font-bold text-white">Preview Interview Practice</h3>
+          </div>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors text-xs">Close</button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {state === 'loading_q' && (
+            <div className="flex items-center gap-2 py-8 justify-center">
+              <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
+              <p className="text-xs text-white/40">Generating question for this learner…</p>
+            </div>
+          )}
+
+          {state === 'error' && (
+            <div className="rounded-lg bg-red-500/[0.08] border border-red-500/15 px-3 py-2.5">
+              <p className="text-xs text-red-400">{error}</p>
+            </div>
+          )}
+
+          {state === 'answering' && (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-violet-500/[0.06] border border-violet-500/15 p-3">
+                <p className="text-[10px] font-semibold text-violet-300/80 uppercase tracking-wide mb-1">Interview Question</p>
+                <p className="text-sm text-white/80 leading-relaxed">{question}</p>
+              </div>
+              {error && <p className="text-xs text-red-400">{error}</p>}
+              <textarea value={answer} onChange={(e) => { setAnswer(e.target.value); setError(''); }} rows={4}
+                placeholder="Type a sample answer to preview the grading…"
+                className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-violet-500/50 transition-all resize-none" />
+              <div className="flex items-center justify-end gap-2">
+                <button onClick={onClose} className="px-3 py-1.5 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">Cancel</button>
+                <button onClick={handleSubmit} className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-semibold text-xs hover:from-violet-400 hover:to-fuchsia-400 transition-all">
+                  Grade answer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {state === 'grading' && (
+            <div className="flex items-center gap-2 py-6 justify-center">
+              <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
+              <p className="text-xs text-white/40">Scoring the answer…</p>
+            </div>
+          )}
+
+          {state === 'result' && result && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ['Clarity', result.scores.clarity],
+                  ['Tech Depth', result.scores.technical_depth],
+                  ['Specifics', result.scores.use_of_specifics],
+                ] as const).map(([label, score]) => (
+                  <div key={label} className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-2.5 text-center">
+                    <p className="text-[10px] text-white/40 uppercase tracking-wide mb-1">{label}</p>
+                    <p className={`text-xl font-bold ${scoreColor(score)}`}>{score}<span className="text-xs text-white/30">/5</span></p>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
+                <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1">Feedback</p>
+                <p className="text-xs text-white/60 leading-relaxed">{result.feedback}</p>
+              </div>
+              <div className="rounded-lg bg-green-500/[0.04] border border-green-500/15 p-3">
+                <p className="text-[10px] font-semibold text-green-400/80 uppercase tracking-wide mb-1">Stronger version</p>
+                <p className="text-xs text-white/60 leading-relaxed">{result.suggested_version}</p>
+              </div>
+              <button onClick={onClose} className="w-full px-4 py-2 rounded-lg border border-white/10 text-white/60 text-xs font-semibold hover:text-white/90 transition-all">Done</button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1745,6 +1916,7 @@ function AdminDashboard({
           onReorderResource={onReorderResource}
           learnerQuizAttempts={learnerQuizAttempts.filter((a) => a.learner_id === selectedLearner)}
           learnerInterviewPractice={learnerInterviewPractice.filter((p) => p.learner_id === selectedLearner)}
+          learnerJournalEntries={learnerJournalEntries.filter((j) => j.learner_id === selectedLearner)}
         />
       </div>
     );

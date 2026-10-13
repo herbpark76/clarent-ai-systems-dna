@@ -216,7 +216,19 @@ ${resourceList || "(none)"}`;
       return json({ error: "Claude did not return valid quiz questions." }, 502);
     }
 
-    return json({ questions: result.questions });
+    let questions = result.questions as Array<Record<string, unknown>>;
+    if (questions.length > 4) {
+      questions = questions.slice(0, 4);
+    }
+    while (questions.length < 4) {
+      questions.push({
+        type: "short_answer",
+        question: `Bonus question ${questions.length + 1}: In your own words, explain a key concept from this week's material.`,
+        reference_answer: "Any answer demonstrating understanding of the week's concepts.",
+      });
+    }
+
+    return json({ questions });
   }
 
   if (action === "grade") {

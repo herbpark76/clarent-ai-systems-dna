@@ -8,7 +8,7 @@ import {
 import type { Task, TaskResource, Week, JournalEntry, ProgressRow } from './coachTypes';
 
 // ── Instant Feedback Modal ──────────────────────────────
-export function CoachFeedbackModal({ task, resources, existingProgress, learnerNote, learnerLink, onClose, onComplete }: {
+export function CoachFeedbackModal({ task, resources, existingProgress, learnerNote, learnerLink, onClose, onComplete, onSkipWithoutFeedback }: {
   task: Task;
   resources: TaskResource[];
   existingProgress?: ProgressRow;
@@ -16,12 +16,14 @@ export function CoachFeedbackModal({ task, resources, existingProgress, learnerN
   learnerLink: string;
   onClose: () => void;
   onComplete: (feedback: CoachFeedback, answer: string) => Promise<void>;
+  onSkipWithoutFeedback: () => Promise<void>;
 }) {
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<CoachFeedback | null>(null);
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [coachFailed, setCoachFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +38,10 @@ export function CoachFeedbackModal({ task, resources, existingProgress, learnerN
         });
         if (!cancelled) setFeedback(result);
       } catch (err) {
-        if (!cancelled) setError((err as Error).message);
+        if (!cancelled) {
+          setError((err as Error).message);
+          setCoachFailed(true);
+        }
       }
       if (!cancelled) setLoading(false);
     })();
@@ -45,13 +50,19 @@ export function CoachFeedbackModal({ task, resources, existingProgress, learnerN
   }, []);
 
   const handleSubmit = async () => {
-    if (answer.trim().length < 10) {
-      setError('Please write at least 10 characters answering the question.');
+    if (answer.trim().length < 20) {
+      setError('Please write at least 20 characters answering the question.');
       return;
     }
     setSubmitting(true);
     setError('');
     await onComplete(feedback!, answer.trim());
+    setSubmitting(false);
+  };
+
+  const handleSkipWithoutFeedback = async () => {
+    setSubmitting(true);
+    await onSkipWithoutFeedback();
     setSubmitting(false);
   };
 
@@ -66,7 +77,7 @@ export function CoachFeedbackModal({ task, resources, existingProgress, learnerN
             </div>
             <h3 className="text-sm font-bold text-white">AI Coach Feedback</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors text-xs">Skip</button>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors text-xs">Cancel</button>
         </div>
 
         <div className="px-5 py-4 space-y-4">
@@ -77,10 +88,14 @@ export function CoachFeedbackModal({ task, resources, existingProgress, learnerN
             </div>
           )}
 
-          {error && !loading && (
+          {coachFailed && !loading && (
             <div className="rounded-lg bg-red-500/[0.08] border border-red-500/15 px-3 py-2.5">
-              <p className="text-xs text-red-400">{error}</p>
-              <button onClick={onClose} className="mt-2 text-[10px] text-white/40 hover:text-white/70">Continue without feedback</button>
+              <p className="text-xs text-red-400 mb-2">{error}</p>
+              <p className="text-[10px] text-white/40 mb-3">The AI coach couldn't review your submission. You can still submit your task for review without coach feedback.</p>
+              <button onClick={handleSkipWithoutFeedback} disabled={submitting}
+                className="px-3 py-2 rounded-lg border border-white/10 text-white/60 text-xs hover:text-white/90 disabled:opacity-60 transition-all">
+                {submitting ? 'Submitting…' : 'Submit without AI feedback'}
+              </button>
             </div>
           )}
 
@@ -101,14 +116,15 @@ export function CoachFeedbackModal({ task, resources, existingProgress, learnerN
                   value={answer}
                   onChange={(e) => { setAnswer(e.target.value); setError(''); }}
                   rows={3}
-                  placeholder="Your answer…"
+                  placeholder="Your answer… (at least 20 characters)"
                   className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-violet-500/50 transition-all resize-none"
                 />
+                <p className="text-[10px] text-white/30 mt-1">{answer.trim().length}/20 characters minimum</p>
               </div>
+              {error && <p className="text-xs text-red-400">{error}</p>}
               <div className="flex items-center justify-end gap-2">
-                <button onClick={onClose} className="px-3 py-2 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">Skip</button>
-                <button onClick={handleSubmit} disabled={submitting}
-                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-semibold text-xs hover:from-violet-400 hover:to-fuchsia-400 disabled:opacity-60 transition-all">
+                <button onClick={handleSubmit} disabled={submitting || answer.trim().length < 20}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-semibold text-xs hover:from-violet-400 hover:to-fuchsia-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
                   {submitting ? 'Submitting…' : 'Submit for review'}
                 </button>
               </div>
