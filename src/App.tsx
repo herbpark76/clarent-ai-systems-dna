@@ -11,6 +11,7 @@ import ModelsPage from './pages/ModelsPage';
 import RiskPage from './pages/RiskPage';
 import NotFoundPage from './pages/NotFoundPage';
 import LearnPortal from './pages/LearnPortal';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   return (
@@ -26,7 +27,7 @@ export default function App() {
         <Route path="/use-cases" element={<UseCasesPage />} />
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/risk" element={<RiskPage />} />
-        <Route path="/learn" element={<LearnPortal />} />
+        <Route path="/learn" element={<ErrorBoundary><LearnPortal /></ErrorBoundary>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>

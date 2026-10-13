@@ -813,12 +813,13 @@ function LearnerDashboard({
   track, weeks, tasks, progress, onSubmitTask, fullName, readOnly = false,
   journalEntries, onJumpToJournal, startDate, resources, isAdmin = false,
   onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
+  learnerId, quizAttempts = [], interviewPractice = [], onQuizPassed, onNewInterviewAttempt,
 }: {
   track: Track;
   weeks: Week[];
   tasks: Task[];
   progress: Map<string, ProgressRow>;
-  onSubmitTask: (taskId: string, note: string, link: string) => Promise<void>;
+  onSubmitTask: (taskId: string, note: string, link: string, coachFeedback?: CoachFeedback, coachAnswer?: string) => Promise<void>;
   fullName: string;
   readOnly?: boolean;
   learnerId: string;
