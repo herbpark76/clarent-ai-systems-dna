@@ -7,6 +7,7 @@ import {
   UserPlus, X, Mail, Check, Clock, AlertTriangle,
   FileText, Link2, MessageSquare, Send, Edit3,
   ClipboardCheck, Hourglass, CalendarDays,
+  Video, Lightbulb, Plus, Trash2, ExternalLink, BookMarked, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -55,6 +56,17 @@ interface ProgressRow {
   submitted_at: string | null;
   reviewed_at: string | null;
   review_comment: string | null;
+}
+
+type ResourceKind = 'doc' | 'video' | 'concept' | 'tutorial';
+
+interface TaskResource {
+  id: string;
+  task_id: string;
+  title: string;
+  url: string;
+  kind: ResourceKind;
+  sort_order: number;
 }
 
 interface LearnerInfo {
@@ -285,6 +297,161 @@ function DueDateBadge({ dueDate, status }: { dueDate: string | null; status: Tas
     );
   }
   return null;
+}
+
+// ── Resource Helpers ───────────────────────────────────
+function ResourceIcon({ kind, className = 'w-3 h-3' }: { kind: ResourceKind; className?: string }) {
+  switch (kind) {
+    case 'video': return <Video className={className} />;
+    case 'concept': return <Lightbulb className={className} />;
+    case 'tutorial': return <GraduationCap className={className} />;
+    default: return <FileText className={className} />;
+  }
+}
+
+function ResourceChips({ taskId, resourcesByTask, isAdmin, onAdd, onEdit, onDelete, onReorder }: {
+  taskId: string;
+  resourcesByTask: Map<string, TaskResource[]>;
+  isAdmin: boolean;
+  onAdd: (taskId: string) => void;
+  onEdit: (resource: TaskResource) => void;
+  onDelete: (id: string) => void;
+  onReorder: (id: string, dir: 'up' | 'down') => void;
+}) {
+  const taskResources = resourcesByTask.get(taskId) || [];
+  if (taskResources.length === 0 && !isAdmin) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+      {taskResources.length > 0 && (
+        <span className="text-[10px] text-white/30 flex items-center gap-1 flex-shrink-0">
+          <BookMarked className="w-2.5 h-2.5" /> Learn
+        </span>
+      )}
+      {taskResources.map((r, i) => {
+        const isInternal = r.url.startsWith('/');
+        const chipContent = (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-white/[0.05] border border-white/[0.08] text-white/60 hover:text-white/90 hover:border-white/15 transition-all">
+            <ResourceIcon kind={r.kind} className="w-2.5 h-2.5" />
+            {r.title}
+            {!isInternal && <ExternalLink className="w-2 h-2 opacity-40" />}
+          </span>
+        );
+        return (
+          <span key={r.id} className="inline-flex items-center gap-0.5">
+            {isInternal ? (
+              <Link to={r.url}>{chipContent}</Link>
+            ) : (
+              <a href={r.url} target="_blank" rel="noopener noreferrer">{chipContent}</a>
+            )}
+            {isAdmin && (
+              <span className="inline-flex items-center gap-0.5">
+                {i > 0 && (
+                  <button onClick={() => onReorder(r.id, 'up')} className="text-white/15 hover:text-white/50 transition-colors p-0.5">
+                    <ChevronUp className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {i < taskResources.length - 1 && (
+                  <button onClick={() => onReorder(r.id, 'down')} className="text-white/15 hover:text-white/50 transition-colors p-0.5">
+                    <ChevronDown className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                <button onClick={() => onEdit(r)} className="text-white/15 hover:text-white/50 transition-colors p-0.5">
+                  <Edit3 className="w-2.5 h-2.5" />
+                </button>
+                <button onClick={() => onDelete(r.id)} className="text-white/15 hover:text-red-400 transition-colors p-0.5">
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            )}
+          </span>
+        );
+      })}
+      {isAdmin && (
+        <button
+          onClick={() => onAdd(taskId)}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-white/[0.03] border border-dashed border-white/[0.12] text-white/30 hover:text-white/60 hover:border-white/20 transition-all"
+        >
+          <Plus className="w-2.5 h-2.5" /> Add
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ResourceEditModal({ resource, taskId, onClose, onSave }: {
+  resource: TaskResource | null;
+  taskId: string;
+  onClose: () => void;
+  onSave: (data: { id?: string; task_id: string; title: string; url: string; kind: ResourceKind; sort_order: number }) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(resource?.title || '');
+  const [url, setUrl] = useState(resource?.url || '');
+  const [kind, setKind] = useState<ResourceKind>(resource?.kind || 'doc');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !url.trim()) {
+      setError('Title and URL are required.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    await onSave({
+      id: resource?.id,
+      task_id: taskId,
+      title: title.trim(),
+      url: url.trim(),
+      kind,
+      sort_order: resource?.sort_order ?? 0,
+    });
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1320] shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
+          <h3 className="text-sm font-bold text-white">{resource ? 'Edit resource' : 'Add resource'}</h3>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+          <div>
+            <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">Title</label>
+            <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Resource title"
+              className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">URL</label>
+            <input type="text" required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… or /concepts/…"
+              className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">Type</label>
+            <select value={kind} onChange={(e) => setKind(e.target.value as ResourceKind)}
+              className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50 transition-all">
+              <option value="doc">Documentation</option>
+              <option value="video">Video</option>
+              <option value="concept">Concept page</option>
+              <option value="tutorial">Tutorial</option>
+            </select>
+          </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-3 py-2 rounded-lg border border-white/10 text-white/50 text-xs hover:text-white/80 transition-all">Cancel</button>
+            <button type="submit" disabled={submitting} className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-xs hover:from-blue-400 hover:to-cyan-400 disabled:opacity-60 transition-all">
+              {submitting ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 // ── Auth Gate ──────────────────────────────────────────
@@ -522,7 +689,8 @@ function RequestChangesModal({ taskTitle, onClose, onSubmit }: {
 // ── Learner Dashboard ──────────────────────────────────
 function LearnerDashboard({
   track, weeks, tasks, progress, onSubmitTask, fullName, readOnly = false,
-  journalEntries, onJumpToJournal, startDate,
+  journalEntries, onJumpToJournal, startDate, resources, isAdmin = false,
+  onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
 }: {
   track: Track;
   weeks: Week[];
@@ -535,6 +703,12 @@ function LearnerDashboard({
   journalEntries: JournalEntry[];
   onJumpToJournal: () => void;
   startDate: string | null;
+  resources: TaskResource[];
+  isAdmin?: boolean;
+  onAddResource?: (taskId: string, title: string, url: string, kind: ResourceKind, sortOrder: number) => Promise<void>;
+  onUpdateResource?: (id: string, title: string, url: string, kind: ResourceKind) => Promise<void>;
+  onDeleteResource?: (id: string) => Promise<void>;
+  onReorderResource?: (id: string, dir: 'up' | 'down') => Promise<void>;
 }) {
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const totalTasks = tasks.length;
@@ -555,7 +729,18 @@ function LearnerDashboard({
     if (isDueThisWeek(dd, status)) dueThisWeekCount++;
   }
 
+  const resourcesByTask = useMemo(() => {
+    const map = new Map<string, TaskResource[]>();
+    for (const r of resources) {
+      if (!map.has(r.task_id)) map.set(r.task_id, []);
+      map.get(r.task_id)!.push(r);
+    }
+    for (const [, list] of map) list.sort((a, b) => a.sort_order - b.sort_order);
+    return map;
+  }, [resources]);
+
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
   const entryCountByWeek = getEntryCountByWeek(journalEntries);
 
   return (
@@ -632,6 +817,7 @@ function LearnerDashboard({
           const weekPct = weekTasks.length > 0 ? Math.round((weekApproved / weekTasks.length) * 100) : 0;
           const wr = weekRanges.get(week.id);
           const current = isCurrentWeek(wr);
+          const weekResourceCount = weekTasks.reduce((sum, t) => sum + (resourcesByTask.get(t.id)?.length || 0), 0);
 
           return (
             <div
@@ -666,6 +852,11 @@ function LearnerDashboard({
                   <span className={`text-xs font-semibold ${weekPct === 100 ? 'text-green-400' : 'text-white/40'}`}>
                     {weekApproved}/{weekTasks.length}
                   </span>
+                  {weekResourceCount > 0 && (
+                    <span className="flex items-center gap-1 text-[10px] text-white/30">
+                      <BookMarked className="w-2.5 h-2.5" /> {weekResourceCount}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -719,6 +910,17 @@ function LearnerDashboard({
                                 )}
                                 <DueDateBadge dueDate={dd} status={status} />
                               </div>
+
+                              {/* Learning resources */}
+                              <ResourceChips
+                                taskId={task.id}
+                                resourcesByTask={resourcesByTask}
+                                isAdmin={isAdmin}
+                                onAdd={(tid) => setResourceEditFor({ taskId: tid, resource: null })}
+                                onEdit={(r) => setResourceEditFor({ taskId: r.task_id, resource: r })}
+                                onDelete={(id) => onDeleteResource?.(id)}
+                                onReorder={(id, dir) => onReorderResource?.(id, dir)}
+                              />
 
                               {/* Submitted: show note, link, late flag */}
                               {(status === 'submitted' || status === 'approved' || status === 'changes_requested') && p?.completion_note && (
@@ -789,6 +991,23 @@ function LearnerDashboard({
           );
         })}
       </div>
+
+      {/* Resource edit modal */}
+      {resourceEditFor && (
+        <ResourceEditModal
+          resource={resourceEditFor.resource}
+          taskId={resourceEditFor.taskId}
+          onClose={() => setResourceEditFor(null)}
+          onSave={async (data) => {
+            if (data.id) {
+              await onUpdateResource?.(data.id, data.title, data.url, data.kind);
+            } else {
+              await onAddResource?.(data.task_id, data.title, data.url, data.kind, data.sort_order);
+            }
+            setResourceEditFor(null);
+          }}
+        />
+      )}
 
       {/* Task completion modal */}
       {activeTask && (
@@ -928,6 +1147,7 @@ function InviteLearnerModal({ onClose, onInvited }: {
 function LearnerDetailTabs({
   selectedLearner, selectedLearnerInfo, weeks, tasks, learnerProgress, adminId,
   onApproveTask, onRequestChanges, onUpdateStartDate,
+  resources, onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
 }: {
   selectedLearner: string;
   selectedLearnerInfo: LearnerInfo;
@@ -938,11 +1158,17 @@ function LearnerDetailTabs({
   onApproveTask: (progressId: string) => Promise<void>;
   onRequestChanges: (progressId: string, comment: string) => Promise<void>;
   onUpdateStartDate: (learnerId: string, startDate: string) => Promise<void>;
+  resources: TaskResource[];
+  onAddResource: (taskId: string, title: string, url: string, kind: ResourceKind, sortOrder: number) => Promise<void>;
+  onUpdateResource: (id: string, title: string, url: string, kind: ResourceKind) => Promise<void>;
+  onDeleteResource: (id: string) => Promise<void>;
+  onReorderResource: (id: string, dir: 'up' | 'down') => Promise<void>;
 }) {
   const hasJournal = !!selectedLearnerInfo.latestEntryDate;
   const [detailTab, setDetailTab] = useState<'progress' | 'journal'>(hasJournal ? 'journal' : 'progress');
   const [requestChangesFor, setRequestChangesFor] = useState<ProgressRow | null>(null);
   const [startDateInput, setStartDateInput] = useState(selectedLearnerInfo.startDate || '');
+  const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
   const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
 
@@ -954,6 +1180,15 @@ function LearnerDetailTabs({
     () => buildWeekRanges(selectedLearnerInfo.startDate, weeks),
     [selectedLearnerInfo.startDate, weeks],
   );
+  const resourcesByTask = useMemo(() => {
+    const map = new Map<string, TaskResource[]>();
+    for (const r of resources) {
+      if (!map.has(r.task_id)) map.set(r.task_id, []);
+      map.get(r.task_id)!.push(r);
+    }
+    for (const [, list] of map) list.sort((a, b) => a.sort_order - b.sort_order);
+    return map;
+  }, [resources]);
 
   const approvedCount = learnerProgress.filter((p) => p.status === 'approved').length;
   const submittedCount = learnerProgress.filter((p) => p.status === 'submitted').length;
@@ -1023,6 +1258,7 @@ function LearnerDetailTabs({
             const weekTasks = tasks.filter((t) => t.week_id === week.id).sort((a, b) => a.sort_order - b.sort_order);
             const weekApproved = weekTasks.filter((t) => progressMap.get(t.id)?.status === 'approved').length;
             const wr = weekRanges.get(week.id);
+            const weekResourceCount = weekTasks.reduce((sum, t) => sum + (resourcesByTask.get(t.id)?.length || 0), 0);
             return (
               <div key={week.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
                 <div className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.05]">
@@ -1036,6 +1272,11 @@ function LearnerDetailTabs({
                     </span>
                   )}
                   <span className="text-xs font-semibold text-white/40">{weekApproved}/{weekTasks.length}</span>
+                  {weekResourceCount > 0 && (
+                    <span className="flex items-center gap-1 text-[10px] text-white/30">
+                      <BookMarked className="w-2.5 h-2.5" /> {weekResourceCount}
+                    </span>
+                  )}
                 </div>
                 <div className="px-5 py-2 divide-y divide-white/[0.04]">
                   {weekTasks.map((task) => {
@@ -1067,6 +1308,17 @@ function LearnerDetailTabs({
                               )}
                               <DueDateBadge dueDate={dd} status={status} />
                             </div>
+
+                            {/* Learning resources */}
+                            <ResourceChips
+                              taskId={task.id}
+                              resourcesByTask={resourcesByTask}
+                              isAdmin={true}
+                              onAdd={(tid) => setResourceEditFor({ taskId: tid, resource: null })}
+                              onEdit={(r) => setResourceEditFor({ taskId: r.task_id, resource: r })}
+                              onDelete={(id) => onDeleteResource(id)}
+                              onReorder={(id, dir) => onReorderResource(id, dir)}
+                            />
 
                             {/* Submitted/approved/changes: show note */}
                             {(status === 'submitted' || status === 'approved' || status === 'changes_requested') && p?.completion_note && (
@@ -1140,6 +1392,23 @@ function LearnerDetailTabs({
         <AdminJournal learnerId={selectedLearner} weeks={weeks} adminId={adminId} />
       )}
 
+      {/* Resource edit modal */}
+      {resourceEditFor && (
+        <ResourceEditModal
+          resource={resourceEditFor.resource}
+          taskId={resourceEditFor.taskId}
+          onClose={() => setResourceEditFor(null)}
+          onSave={async (data) => {
+            if (data.id) {
+              await onUpdateResource(data.id, data.title, data.url, data.kind);
+            } else {
+              await onAddResource(data.task_id, data.title, data.url, data.kind, data.sort_order);
+            }
+            setResourceEditFor(null);
+          }}
+        />
+      )}
+
       {/* Request changes modal */}
       {requestChangesFor && (
         <RequestChangesModal
@@ -1159,6 +1428,7 @@ function LearnerDetailTabs({
 function AdminDashboard({
   learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
   onInviteLearner, onApproveTask, onRequestChanges, onUpdateStartDate,
+  resources, onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
 }: {
   learners: LearnerInfo[];
   weeks: Week[];
@@ -1173,6 +1443,11 @@ function AdminDashboard({
   onApproveTask: (progressId: string) => Promise<void>;
   onRequestChanges: (progressId: string, comment: string) => Promise<void>;
   onUpdateStartDate: (learnerId: string, startDate: string) => Promise<void>;
+  resources: TaskResource[];
+  onAddResource: (taskId: string, title: string, url: string, kind: ResourceKind, sortOrder: number) => Promise<void>;
+  onUpdateResource: (id: string, title: string, url: string, kind: ResourceKind) => Promise<void>;
+  onDeleteResource: (id: string) => Promise<void>;
+  onReorderResource: (id: string, dir: 'up' | 'down') => Promise<void>;
 }) {
   const sortedLearners = [...learners].sort((a, b) => b.approvedCount - a.approvedCount);
   const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
@@ -1196,6 +1471,11 @@ function AdminDashboard({
           onApproveTask={onApproveTask}
           onRequestChanges={onRequestChanges}
           onUpdateStartDate={onUpdateStartDate}
+          resources={resources}
+          onAddResource={onAddResource}
+          onUpdateResource={onUpdateResource}
+          onDeleteResource={onDeleteResource}
+          onReorderResource={onReorderResource}
         />
       </div>
     );
@@ -1287,6 +1567,7 @@ export default function LearnPortal() {
   const [track, setTrack] = useState<Track | null>(null);
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [resources, setResources] = useState<TaskResource[]>([]);
   const [progressMap, setProgressMap] = useState<Map<string, ProgressRow>>(new Map());
 
   // Learner's own start date (for trainee view)
@@ -1351,10 +1632,16 @@ export default function LearnPortal() {
         const { data: tk } = await supabase.from('lp_tasks').select('*').in('week_id', weekIds).order('sort_order');
         taskRows = (tk || []) as Task[];
       }
+      let resourceRows: TaskResource[] = [];
+      if (taskRows.length > 0) {
+        const { data: res } = await supabase.from('lp_task_resources').select('*').in('task_id', taskRows.map((r) => r.id)).order('sort_order');
+        resourceRows = (res || []) as TaskResource[];
+      }
       if (cancelled) return;
       setTrack(t);
       setWeeks(weekRows);
       setTasks(taskRows);
+      setResources(resourceRows);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -1594,6 +1881,42 @@ export default function LearnPortal() {
     }
   };
 
+  // ── Admin: resource CRUD ──
+  const handleAddResource = async (taskId: string, title: string, url: string, kind: ResourceKind, sortOrder: number) => {
+    const maxSort = Math.max(0, ...resources.filter((r) => r.task_id === taskId).map((r) => r.sort_order));
+    const { data, error } = await supabase.from('lp_task_resources')
+      .insert({ task_id: taskId, title, url, kind, sort_order: sortOrder || maxSort + 1 })
+      .select('*').single();
+    if (!error && data) setResources((prev) => [...prev, data as TaskResource]);
+  };
+
+  const handleUpdateResource = async (id: string, title: string, url: string, kind: ResourceKind) => {
+    await supabase.from('lp_task_resources').update({ title, url, kind }).eq('id', id);
+    setResources((prev) => prev.map((r) => (r.id === id ? { ...r, title, url, kind } : r)));
+  };
+
+  const handleDeleteResource = async (id: string) => {
+    await supabase.from('lp_task_resources').delete().eq('id', id);
+    setResources((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handleReorderResource = async (id: string, dir: 'up' | 'down') => {
+    const resource = resources.find((r) => r.id === id);
+    if (!resource) return;
+    const taskResources = resources.filter((r) => r.task_id === resource.task_id).sort((a, b) => a.sort_order - b.sort_order);
+    const idx = taskResources.findIndex((r) => r.id === id);
+    if (dir === 'up' && idx === 0) return;
+    if (dir === 'down' && idx === taskResources.length - 1) return;
+    const swapWith = taskResources[dir === 'up' ? idx - 1 : idx + 1];
+    await supabase.from('lp_task_resources').update({ sort_order: swapWith.sort_order }).eq('id', id);
+    await supabase.from('lp_task_resources').update({ sort_order: resource.sort_order }).eq('id', swapWith.id);
+    setResources((prev) => prev.map((r) => {
+      if (r.id === id) return { ...r, sort_order: swapWith.sort_order };
+      if (r.id === swapWith.id) return { ...r, sort_order: resource.sort_order };
+      return r;
+    }));
+  };
+
   // ── Admin: update learner start date ──
   const handleUpdateStartDate = async (learnerId: string, startDate: string) => {
     await supabase.from('lp_profiles').update({ start_date: startDate || null }).eq('id', learnerId);
@@ -1705,6 +2028,11 @@ export default function LearnPortal() {
               onApproveTask={handleApproveTask}
               onRequestChanges={handleRequestChanges}
               onUpdateStartDate={handleUpdateStartDate}
+              resources={resources}
+              onAddResource={handleAddResource}
+              onUpdateResource={handleUpdateResource}
+              onDeleteResource={handleDeleteResource}
+              onReorderResource={handleReorderResource}
             />
           )}
 
@@ -1723,10 +2051,16 @@ export default function LearnPortal() {
                 onSubmitTask={async () => {}}
                 fullName={fullName}
                 readOnly
+                isAdmin
                 learnerId={userId}
                 journalEntries={[]}
                 onJumpToJournal={() => {}}
                 startDate={previewStartDate}
+                resources={resources}
+                onAddResource={handleAddResource}
+                onUpdateResource={handleUpdateResource}
+                onDeleteResource={handleDeleteResource}
+                onReorderResource={handleReorderResource}
               />
             </>
           )}
@@ -1769,6 +2103,7 @@ export default function LearnPortal() {
               journalEntries={journalEntries}
               onJumpToJournal={() => setTraineeView('journal')}
               startDate={myStartDate}
+              resources={resources}
             />
           )}
         </div>
