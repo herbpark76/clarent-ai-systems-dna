@@ -1414,6 +1414,7 @@ function LearnerDetailTabs({
   onApproveTask, onRequestChanges, onUpdateStartDate,
   resources, onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
   learnerQuizAttempts, learnerInterviewPractice, learnerJournalEntries,
+  adminManualUnlocks, onUnlockChanged,
 }: {
   selectedLearner: string;
   selectedLearnerInfo: LearnerInfo;
