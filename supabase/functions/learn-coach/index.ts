@@ -471,6 +471,97 @@ function json(data: Record<string, unknown>, status = 200): Response {
   });
 }
 
+// ── Mode: session_prep ─────────────────────────────────
+async function handleSessionPrep(
+  supabase: ReturnType<typeof createClient>,
+  callerId: string,
+  _isAdmin: boolean,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const {
+    learner_name, week_title, week_number,
+    approved_tasks, submitted_tasks, overdue_tasks,
+    quiz_scores, journal_questions,
+  } = body as {
+    learner_name?: string;
+    week_title?: string;
+    week_number?: number;
+    approved_tasks?: Array<{ title: string; note: string }>;
+    submitted_tasks?: Array<{ title: string; note: string }>;
+    overdue_tasks?: Array<{ title: string; due_date: string }>;
+    quiz_scores?: Array<{ week: string; score: number; passed: boolean }>;
+    journal_questions?: Array<string>;
+  };
+
+  const approvedList = (approved_tasks || []).map((t) => `- ${t.title}${t.note ? `: ${t.note.slice(0, 100)}` : ""}`).join("\n") || "(none)";
+  const submittedList = (submitted_tasks || []).map((t) => `- ${t.title}${t.note ? `: ${t.note.slice(0, 100)}` : ""}`).join("\n") || "(none)";
+  const overdueList = (overdue_tasks || []).map((t) => `- ${t.title} (was due ${t.due_date})`).join("\n") || "(none)";
+  const quizList = (quiz_scores || []).map((q) => `- Week ${q.week}: ${q.score}/100 ${q.passed ? "✓" : "✗"}`).join("\n") || "(none)";
+  const journalList = (journal_questions || []).slice(0, 5).map((q) => `- ${q}`).join("\n") || "(none)";
+
+  const system = `You are a training program assistant helping an admin prepare for a 1-on-1 session with a learner. Generate a concise, one-page session prep summary in plain text (no markdown). Structure it as:
+
+SESSION PREP — [Learner Name] — [Date]
+
+✅ COMPLETED & APPROVED THIS WEEK
+[list tasks]
+
+📤 SUBMITTED, AWAILING REVIEW
+[list tasks]
+
+⏰ OVERDUE
+[list tasks or "None"]
+
+📊 QUIZ SCORES
+[list scores]
+
+💬 OPEN QUESTIONS FROM JOURNAL
+[list questions]
+
+🗣️ SUGGESTED DISCUSSION TOPICS
+[3 specific, actionable topics the admin should discuss, each in 1-2 sentences]
+
+Keep it concise and practical. Use the data provided to make the discussion topics specific to what the learner has been working on.`;
+
+  const userMsg = `LEARNER: ${learner_name || "Learner"}
+WEEK: ${week_number ? `Week ${week_number}` : "Current"} — ${week_title || ""}
+
+APPROVED THIS WEEK:
+${approvedList}
+
+SUBMITTED, AWAITING REVIEW:
+${submittedList}
+
+OVERDUE:
+${overdueList}
+
+QUIZ SCORES:
+${quizList}
+
+OPEN JOURNAL QUESTIONS:
+${journalList}`;
+
+  const tools = [{
+    name: "save_prep",
+    description: "Return the session prep summary.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        summary: { type: "string" as const, description: "The full session prep text" },
+      },
+      required: ["summary"] as const,
+    },
+  }];
+
+  const result = await callClaude(system, userMsg, tools, { type: "tool", name: "save_prep" }, 2000);
+
+  if (!result || !result.summary) {
+    return json({ error: "Claude did not return a session prep summary." }, 502);
+  }
+
+  return json({ summary: String(result.summary) });
+}
+
 // ── Main handler ────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -535,8 +626,10 @@ Deno.serve(async (req: Request) => {
         return await handleQuiz(supabase, callerId, isAdmin, body);
       case "interview":
         return await handleInterview(supabase, callerId, isAdmin, body);
+      case "session_prep":
+        return await handleSessionPrep(supabase, callerId, isAdmin, body);
       default:
-        return json({ error: `Unknown mode: ${mode}. Use 'feedback', 'quiz', or 'interview'.` }, 400);
+        return json({ error: `Unknown mode: ${mode}. Use 'feedback', 'quiz', 'interview', or 'session_prep'.` }, 400);
     }
   } catch (err) {
     console.error(`[learn-coach] Unhandled error: ${(err as Error)?.message ?? err}`);

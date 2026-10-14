@@ -93,6 +93,19 @@ export async function gradeInterview(params: {
   return callCoach({ mode: 'interview', action: 'grade', ...params }) as Promise<InterviewGrade>;
 }
 
+export async function generateSessionPrep(params: {
+  learner_name: string;
+  week_title?: string;
+  week_number?: number;
+  approved_tasks?: Array<{ title: string; note: string }>;
+  submitted_tasks?: Array<{ title: string; note: string }>;
+  overdue_tasks?: Array<{ title: string; due_date: string }>;
+  quiz_scores?: Array<{ week: string; score: number; passed: boolean }>;
+  journal_questions?: Array<string>;
+}): Promise<{ summary: string }> {
+  return callCoach({ mode: 'session_prep', ...params }) as Promise<{ summary: string }>;
+}
+
 export interface QuizAttempt {
   id: string;
   learner_id: string;

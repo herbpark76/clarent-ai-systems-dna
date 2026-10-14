@@ -8,7 +8,7 @@ import {
   FileText, Link2, MessageSquare, Send, Edit3,
   ClipboardCheck, Hourglass, CalendarDays,
   Video, Lightbulb, Plus, Trash2, ExternalLink, BookMarked, ChevronUp, ChevronDown,
-  KeyRound, ShieldCheck, Sparkles, Mic,
+  KeyRound, ShieldCheck, Sparkles, Mic, Lock, ClipboardList, Flame, Award, Unlock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NavBar from '../components/NavBar';
@@ -22,6 +22,11 @@ import {
   AdminQuizSummary, AdminInterviewSummary,
 } from '../components/learnCoachComponents';
 import { generateInterviewQuestion, gradeInterview, type QuizAttempt, type InterviewPracticeRow, type CoachFeedback } from '../lib/learnCoach';
+import {
+  computeWeekUnlock, computeStreak, computeBadges, StreakBadgesSection,
+  CelebrationOverlay, SessionPrepModal, AdminUnlockButton, fetchManualUnlocks,
+  type WeekUnlockInfo,
+} from '../components/weekProgress';
 
 // ── Types ──────────────────────────────────────────────
 type TaskStatus = 'not_started' | 'in_progress' | 'submitted' | 'approved' | 'changes_requested';
@@ -814,6 +819,7 @@ function LearnerDashboard({
   journalEntries, onJumpToJournal, startDate, resources, isAdmin = false,
   onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
   learnerId, quizAttempts = [], interviewPractice = [], onQuizPassed, onNewInterviewAttempt,
+  manualUnlocks, onWeekCompleted,
 }: {
   track: Track;
   weeks: Week[];
@@ -836,6 +842,8 @@ function LearnerDashboard({
   interviewPractice?: InterviewPracticeRow[];
   onQuizPassed?: () => void;
   onNewInterviewAttempt?: () => void;
+  manualUnlocks?: Set<string>;
+  onWeekCompleted?: (weekNumber: number) => void;
 }) {
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const totalTasks = tasks.length;
@@ -869,7 +877,36 @@ function LearnerDashboard({
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
   const [coachModal, setCoachModal] = useState<{ task: Task; note: string; link: string } | null>(null);
+  const [celebrationWeek, setCelebrationWeek] = useState<number | null>(null);
   const entryCountByWeek = getEntryCountByWeek(journalEntries);
+
+  const unlockSet = manualUnlocks || new Set<string>();
+  const streak = useMemo(() => computeStreak(weeks, tasks, progress, startDate), [weeks, tasks, progress, startDate]);
+  const badges = useMemo(() => computeBadges(weeks, tasks, progress, quizAttempts), [weeks, tasks, progress, quizAttempts]);
+
+  // Track which weeks were previously incomplete to detect completion
+  const prevWeekCompleteRef = useState<Set<number>>(new Set())[0];
+  useEffect(() => {
+    const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
+    const nowComplete = new Set<number>();
+    for (const week of sortedWeeks) {
+      const weekTasks = tasks.filter((t) => t.week_id === week.id);
+      if (weekTasks.length > 0 && weekTasks.every((t) => progress.get(t.id)?.status === 'approved')) {
+        nowComplete.add(week.week_number);
+      }
+    }
+    // Check if any week just became complete that wasn't before
+    for (const wn of nowComplete) {
+      if (!prevWeekCompleteRef.has(wn) && !readOnly) {
+        setCelebrationWeek(wn);
+        break;
+      }
+    }
+    // Update ref — we use a mutable ref pattern
+    (prevWeekCompleteRef as Set<number>).clear();
+    nowComplete.forEach((n) => (prevWeekCompleteRef as Set<number>).add(n));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, weeks, tasks, readOnly]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-24">
@@ -915,6 +952,11 @@ function LearnerDashboard({
         </div>
       )}
 
+      {/* Streak + Badges */}
+      {!readOnly && (
+        <StreakBadgesSection streak={streak} badges={badges} />
+      )}
+
       {/* Overall progress bar */}
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 mb-8">
         <div className="flex items-center justify-between mb-3">
@@ -946,24 +988,33 @@ function LearnerDashboard({
           const wr = weekRanges.get(week.id);
           const current = isCurrentWeek(wr);
           const weekResourceCount = weekTasks.reduce((sum, t) => sum + (resourcesByTask.get(t.id)?.length || 0), 0);
+          const unlockInfo = computeWeekUnlock(week, weeks, tasks, progress, quizAttempts, unlockSet);
+          const isLocked = unlockInfo.locked && !readOnly;
 
           return (
             <div
               key={week.id}
               className={`rounded-xl border overflow-hidden transition-all ${
+                isLocked ? 'border-white/[0.04] bg-white/[0.01] opacity-60' :
                 current ? 'border-blue-500/40 bg-blue-500/[0.03] shadow-lg shadow-blue-500/5' : 'border-white/[0.08] bg-white/[0.02]'
               }`}
             >
               {/* Week header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.05]">
                 <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                  isLocked ? 'bg-white/[0.03] text-white/20' :
                   current ? 'bg-blue-500/20 text-blue-300' : 'bg-white/[0.05] text-white/40'
                 }`}>
-                  {week.week_number}
+                  {isLocked ? <Lock className="w-3.5 h-3.5" /> : week.week_number}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white">{week.title}</h3>
-                  {week.goal && <p className="text-xs text-white/40 mt-0.5">{week.goal}</p>}
+                  <h3 className={`text-sm font-bold ${isLocked ? 'text-white/40' : 'text-white'}`}>{week.title}</h3>
+                  {week.goal && <p className={`text-xs mt-0.5 ${isLocked ? 'text-white/25' : 'text-white/40'}`}>{week.goal}</p>}
+                  {isLocked && unlockInfo.reason && (
+                    <p className="text-[10px] text-white/30 mt-0.5 flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5" /> {unlockInfo.reason}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
                   {wr && (
@@ -972,7 +1023,7 @@ function LearnerDashboard({
                       {formatDateRange(wr.start, wr.end)}
                     </span>
                   )}
-                  {current && (
+                  {current && !isLocked && (
                     <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                       Current
                     </span>
@@ -1088,7 +1139,7 @@ function LearnerDashboard({
                               )}
 
                               {/* Action buttons */}
-                              {!readOnly && status !== 'approved' && status !== 'submitted' && (
+                              {!readOnly && !isLocked && status !== 'approved' && status !== 'submitted' && (
                                 <button
                                   onClick={() => setActiveTask(task)}
                                   className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/25 text-blue-300 text-xs font-semibold hover:bg-blue-500/25 transition-all"
@@ -1097,7 +1148,7 @@ function LearnerDashboard({
                                   {status === 'changes_requested' ? 'Resubmit' : 'Mark complete'}
                                 </button>
                               )}
-                              {!readOnly && status === 'submitted' && (
+                              {!readOnly && !isLocked && status === 'submitted' && (
                                 <button
                                   onClick={() => setActiveTask(task)}
                                   className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/10 text-white/50 text-xs font-semibold hover:text-white/80 hover:bg-white/[0.08] transition-all"
@@ -1138,7 +1189,7 @@ function LearnerDashboard({
               </div>
 
               {/* Knowledge Check card */}
-              {!readOnly && quizAttempts && onQuizPassed && (
+              {!readOnly && !isLocked && quizAttempts && onQuizPassed && (
                 <div className="px-5 pb-3">
                   <KnowledgeCheckCard
                     week={week}
@@ -1152,7 +1203,7 @@ function LearnerDashboard({
               )}
 
               {/* Interview Practice card (Week 3 onward) */}
-              {!readOnly && interviewPractice && onNewInterviewAttempt && week.week_number >= 3 && (
+              {!readOnly && !isLocked && interviewPractice && onNewInterviewAttempt && week.week_number >= 3 && (
                 <div className="px-5 pb-3">
                   <InterviewPracticeCard
                     learnerId={learnerId}
@@ -1228,6 +1279,13 @@ function LearnerDashboard({
             setActiveTask(null);
           }}
         />
+      )}
+
+      {celebrationWeek !== null && (
+        <CelebrationOverlay weekNumber={celebrationWeek} onClose={() => {
+          setCelebrationWeek(null);
+          onWeekCompleted?.(celebrationWeek);
+        }} />
       )}
     </div>
   );
@@ -1364,6 +1422,7 @@ function LearnerDetailTabs({
   learnerProgress: ProgressRow[];
   adminId: string;
   learnerJournalEntries: JournalEntry[];
+  adminManualUnlocks: Set<string>;
   onApproveTask: (progressId: string) => Promise<void>;
   onRequestChanges: (progressId: string, comment: string) => Promise<void>;
   onUpdateStartDate: (learnerId: string, startDate: string) => Promise<void>;
@@ -1374,6 +1433,7 @@ function LearnerDetailTabs({
   onReorderResource: (id: string, dir: 'up' | 'down') => Promise<void>;
   learnerQuizAttempts: QuizAttempt[];
   learnerInterviewPractice: InterviewPracticeRow[];
+  onUnlockChanged: () => void;
 }) {
   const hasJournal = !!selectedLearnerInfo.latestEntryDate;
   const hasAwaitingReview = learnerProgress.some((p) => p.status === 'submitted');
@@ -1384,8 +1444,11 @@ function LearnerDetailTabs({
   const [startDateInput, setStartDateInput] = useState(selectedLearnerInfo.startDate || '');
   const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
   const [showInterviewPreview, setShowInterviewPreview] = useState(false);
+  const [showSessionPrep, setShowSessionPrep] = useState(false);
   const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
+  const adminBadges = useMemo(() => computeBadges(weeks, tasks, progressMap, learnerQuizAttempts), [weeks, tasks, progressMap, learnerQuizAttempts]);
+  const adminStreak = useMemo(() => computeStreak(weeks, tasks, progressMap, selectedLearnerInfo.startDate), [weeks, tasks, progressMap, selectedLearnerInfo.startDate]);
 
   const taskDueDates = useMemo(
     () => buildTaskDueDates(selectedLearnerInfo.startDate, weeks, tasks),
@@ -1447,6 +1510,17 @@ function LearnerDetailTabs({
         </div>
       </div>
 
+      {/* Streak + Badges + Session prep */}
+      <div className="mb-6">
+        <StreakBadgesSection streak={adminStreak} badges={adminBadges} compact />
+        <button
+          onClick={() => setShowSessionPrep(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-500/15 to-cyan-500/15 border border-blue-500/25 text-cyan-300 text-xs font-semibold hover:from-blue-500/25 hover:to-cyan-500/25 transition-all"
+        >
+          <ClipboardList className="w-3.5 h-3.5" /> Prep for session
+        </button>
+      </div>
+
       {/* Tab toggle */}
       <div className="inline-flex items-center gap-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08] p-0.5 mb-6">
         <button
@@ -1503,6 +1577,13 @@ function LearnerDetailTabs({
                       <BookMarked className="w-2.5 h-2.5" /> {weekResourceCount}
                     </span>
                   )}
+                  <AdminUnlockButton
+                    learnerId={selectedLearner}
+                    weekId={week.id}
+                    weekNumber={week.week_number}
+                    isUnlocked={computeWeekUnlock(week, weeks, tasks, progressMap, learnerQuizAttempts, adminManualUnlocks).locked === false}
+                    onUnlocked={onUnlockChanged}
+                  />
                 </div>
                 <div className="px-5 py-2 divide-y divide-white/[0.04]">
                   {weekTasks.map((task) => {
@@ -1688,6 +1769,22 @@ function LearnerDetailTabs({
         />
       )}
 
+      {/* Admin session prep modal */}
+      {showSessionPrep && (
+        <SessionPrepModal
+          learnerId={selectedLearner}
+          learnerName={selectedLearnerInfo.fullName}
+          weeks={weeks}
+          tasks={tasks}
+          progress={learnerProgress}
+          quizAttempts={learnerQuizAttempts}
+          journalEntries={learnerJournalEntries}
+          startDate={selectedLearnerInfo.startDate}
+          adminId={adminId}
+          onClose={() => setShowSessionPrep(false)}
+        />
+      )}
+
       {/* Resource edit modal */}
       {resourceEditFor && (
         <ResourceEditModal
@@ -1864,7 +1961,7 @@ function AdminDashboard({
   learners, weeks, tasks, onSelectLearner, selectedLearner, learnerProgress, track, adminId,
   onInviteLearner, onApproveTask, onRequestChanges, onUpdateStartDate,
   resources, onAddResource, onUpdateResource, onDeleteResource, onReorderResource,
-  learnerQuizAttempts, learnerInterviewPractice,
+  learnerQuizAttempts, learnerInterviewPractice, learnerJournalEntries, manualUnlocks, onUnlockChanged,
 }: {
   learners: LearnerInfo[];
   weeks: Week[];
@@ -1886,6 +1983,8 @@ function AdminDashboard({
   onReorderResource: (id: string, dir: 'up' | 'down') => Promise<void>;
   learnerQuizAttempts: QuizAttempt[];
   learnerInterviewPractice: InterviewPracticeRow[];
+  manualUnlocks: Set<string>;
+  onUnlockChanged: () => void;
 }) {
   const sortedLearners = [...learners].sort((a, b) => b.approvedCount - a.approvedCount);
   const selectedLearnerInfo = learners.find((l) => l.id === selectedLearner);
@@ -1917,6 +2016,8 @@ function AdminDashboard({
           learnerQuizAttempts={learnerQuizAttempts.filter((a) => a.learner_id === selectedLearner)}
           learnerInterviewPractice={learnerInterviewPractice.filter((p) => p.learner_id === selectedLearner)}
           learnerJournalEntries={learnerJournalEntries.filter((j) => j.learner_id === selectedLearner)}
+          adminManualUnlocks={manualUnlocks}
+          onUnlockChanged={onUnlockChanged}
         />
       </div>
     );
@@ -2029,6 +2130,7 @@ export default function LearnPortal() {
   const [interviewPractice, setInterviewPractice] = useState<InterviewPracticeRow[]>([]);
   const [learnerQuizAttempts, setLearnerQuizAttempts] = useState<QuizAttempt[]>([]);
   const [learnerInterviewPractice, setLearnerInterviewPractice] = useState<InterviewPracticeRow[]>([]);
+  const [manualUnlocks, setManualUnlocks] = useState<Set<string>>(new Set());
   const [authView, setAuthView] = useState<'signin' | 'forgot'>('signin');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
 
@@ -2227,6 +2329,12 @@ export default function LearnPortal() {
         // Load interview practice
         const { data: ipData } = await supabase.from('lp_interview_practice').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
         if (!cancelled) setInterviewPractice((ipData || []) as InterviewPracticeRow[]);
+
+        // Load own manual unlocks (for week locking display)
+        if (!cancelled) {
+          const unlocks = await fetchManualUnlocks(userId);
+          if (!cancelled) setManualUnlocks(unlocks);
+        }
       })();
     }
     return () => { cancelled = true; };
@@ -2398,14 +2506,21 @@ export default function LearnPortal() {
     ));
   };
 
+  const loadManualUnlocks = useCallback(async (learnerId: string) => {
+    const unlocks = await fetchManualUnlocks(learnerId);
+    setManualUnlocks(unlocks);
+  }, []);
+
   const handleSelectLearner = (learnerId: string) => {
     if (learnerId === '') {
       setSelectedLearner(null);
       setLearnerProgress([]);
+      setManualUnlocks(new Set());
       return;
     }
     setSelectedLearner(learnerId);
     loadSelectedLearnerProgress(learnerId);
+    loadManualUnlocks(learnerId);
   };
 
   const handleSignOut = () => {
@@ -2526,6 +2641,9 @@ export default function LearnPortal() {
               onReorderResource={handleReorderResource}
               learnerQuizAttempts={learnerQuizAttempts}
               learnerInterviewPractice={learnerInterviewPractice}
+              learnerJournalEntries={learnerJournalEntries}
+              manualUnlocks={manualUnlocks}
+              onUnlockChanged={() => selectedLearner && loadManualUnlocks(selectedLearner)}
             />
           )}
 
@@ -2600,6 +2718,7 @@ export default function LearnPortal() {
               resources={resources}
               quizAttempts={quizAttempts}
               interviewPractice={interviewPractice}
+              manualUnlocks={manualUnlocks}
               onQuizPassed={async () => {
                 const { data: qaData } = await supabase.from('lp_quiz_attempts').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
                 setQuizAttempts((qaData || []) as QuizAttempt[]);
