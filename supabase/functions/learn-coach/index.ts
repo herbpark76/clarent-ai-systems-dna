@@ -232,7 +232,7 @@ ${resourceList || "(none)"}`;
   }
 
   if (action === "grade") {
-    const { questions, answers } = body as {
+    const { questions, answers, week_id, target_learner_id } = body as {
       questions: Array<{
         type: string;
         question: string;
@@ -241,11 +241,15 @@ ${resourceList || "(none)"}`;
         reference_answer?: string;
       }>;
       answers: Array<string>;
+      week_id?: string;
+      target_learner_id?: string;
     };
 
     if (!questions || !answers || !Array.isArray(questions) || !Array.isArray(answers)) {
       return json({ error: "questions and answers arrays are required." }, 400);
     }
+
+    const effectiveLearnerId = isAdmin && target_learner_id ? target_learner_id : callerId;
 
     // Grade multiple choice deterministically, short answer via Claude
     const shortAnswerIndices: number[] = [];
@@ -336,7 +340,32 @@ Return an array of grading results, one per short-answer question, in the order 
 
     const overallFeedback = `You scored ${score} out of 100. ${passed ? "Great job — you passed!" : `You need 75 to pass. Review the week's materials and try again.`}`;
 
-    return json({ score, passed, feedback: overallFeedback, question_feedback: questionFeedback });
+    // Save the attempt via service role (bypasses RLS)
+    if (week_id && effectiveLearnerId) {
+      // Verify week is unlocked for this learner before saving
+      const { data: unlockCheck } = await supabase.rpc("lp_is_week_unlocked", {
+        p_learner_id: effectiveLearnerId,
+        p_week_id: week_id,
+      });
+      if (unlockCheck !== true) {
+        return json({ error: "This week is locked. Complete the previous week first." }, 403);
+      }
+
+      const { error: insertError } = await supabase.from("lp_quiz_attempts").insert({
+        learner_id: effectiveLearnerId,
+        week_id,
+        questions: JSON.stringify(questions),
+        answers: JSON.stringify(answers),
+        score,
+        passed,
+        feedback: overallFeedback + "\n\n" + questionFeedback.map((qf) => `Q: ${qf.question}\n${qf.correct ? "✓" : "✗"} ${qf.feedback}`).join("\n\n"),
+      });
+      if (insertError) {
+        console.error("[learn-coach] Failed to save quiz attempt:", insertError.message);
+      }
+    }
+
+    return json({ score, passed, feedback: overallFeedback, question_feedback: questionFeedback, saved: true });
   }
 
   return json({ error: "Invalid quiz action. Use 'generate' or 'grade'." }, 400);
@@ -407,11 +436,13 @@ ${approvedText || "(none)"}`;
   }
 
   if (action === "grade") {
-    const { question, answer } = body as { question: string; answer: string };
+    const { question, answer, target_learner_id } = body as { question: string; answer: string; target_learner_id?: string };
 
     if (!question || !answer) {
       return json({ error: "question and answer are required." }, 400);
     }
+
+    const effectiveLearnerId = isAdmin && target_learner_id ? target_learner_id : callerId;
 
     const system = `You are an interview coach. Grade the learner's answer to an interview question on three dimensions, each scored 1-5:
 - clarity: How clearly and coherently did they explain their thinking?
@@ -454,10 +485,23 @@ LEARNER'S ANSWER: ${answer}`;
       return json({ error: "Claude did not return grading." }, 502);
     }
 
+    // Save the practice attempt via service role (bypasses RLS)
+    const { error: insertError } = await supabase.from("lp_interview_practice").insert({
+      learner_id: effectiveLearnerId,
+      question,
+      answer: answer.trim(),
+      scores: JSON.stringify(result.scores),
+      feedback: String(result.feedback || ""),
+    });
+    if (insertError) {
+      console.error("[learn-coach] Failed to save interview practice:", insertError.message);
+    }
+
     return json({
       scores: result.scores,
       feedback: String(result.feedback || ""),
       suggested_version: String(result.suggested_version || ""),
+      saved: true,
     });
   }
 

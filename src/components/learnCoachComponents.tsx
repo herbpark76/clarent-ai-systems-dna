@@ -206,17 +206,8 @@ export function KnowledgeCheckCard({ week, weekTasks, resources, learnerId, onPa
     setState('grading');
     setError('');
     try {
-      const gradeResult = await gradeQuiz({ questions, answers });
-      // Save attempt
-      await supabase.from('lp_quiz_attempts').insert({
-        learner_id: learnerId,
-        week_id: week.id,
-        questions: questions,
-        answers: answers,
-        score: gradeResult.score,
-        passed: gradeResult.passed,
-        feedback: gradeResult.feedback,
-      });
+      const gradeResult = await gradeQuiz({ questions, answers, week_id: week.id, target_learner_id: learnerId });
+      // Attempt is saved by the edge function via service role
       setResult(gradeResult);
       setState('result');
       if (gradeResult.passed) onPassed();
@@ -381,14 +372,8 @@ export function InterviewPracticeCard({ learnerId, journalEntries, approvedTasks
     setState('grading');
     setError('');
     try {
-      const grade = await gradeInterview({ question, answer: answer.trim() });
-      await supabase.from('lp_interview_practice').insert({
-        learner_id: learnerId,
-        question,
-        answer: answer.trim(),
-        scores: grade.scores,
-        feedback: grade.feedback,
-      });
+      const grade = await gradeInterview({ question, answer: answer.trim(), target_learner_id: learnerId });
+      // Practice record is saved by the edge function via service role
       setResult(grade);
       setState('result');
       onNewAttempt();

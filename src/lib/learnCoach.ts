@@ -68,6 +68,8 @@ export interface QuizGradeResult {
 export async function gradeQuiz(params: {
   questions: QuizQuestion[];
   answers: Array<string>;
+  week_id?: string;
+  target_learner_id?: string;
 }): Promise<QuizGradeResult> {
   return callCoach({ mode: 'quiz', action: 'grade', ...params }) as Promise<QuizGradeResult>;
 }
@@ -89,6 +91,7 @@ export interface InterviewGrade {
 export async function gradeInterview(params: {
   question: string;
   answer: string;
+  target_learner_id?: string;
 }): Promise<InterviewGrade> {
   return callCoach({ mode: 'interview', action: 'grade', ...params }) as Promise<InterviewGrade>;
 }
