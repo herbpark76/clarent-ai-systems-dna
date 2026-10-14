@@ -584,8 +584,8 @@ function ResetPassword({ onDone }: { onDone: () => void }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
     if (password !== confirm) {
@@ -625,6 +625,81 @@ function ResetPassword({ onDone }: { onDone: () => void }) {
             {loading ? 'Saving…' : 'Set new password'}
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Change Password (for signed-in users) ──────────────
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirm) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    if (updateError) {
+      setError(updateError.message);
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+    setSuccess(true);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d1320] shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center">
+              <KeyRound className="w-4 h-4 text-cyan-300" />
+            </div>
+            <h3 className="text-sm font-bold text-white">Change password</h3>
+          </div>
+          <button onClick={onClose} className="p-1 text-white/40 hover:text-white/80 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-5 py-4">
+          {success ? (
+            <div className="text-center py-4">
+              <Check className="w-6 h-6 text-green-400 mx-auto mb-2" />
+              <p className="text-sm text-white/70">Your password has been updated.</p>
+              <button onClick={onClose} className="mt-4 px-4 py-2 rounded-lg border border-white/10 text-white/60 text-xs hover:text-white/90 transition-all">
+                Done
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <input type="password" required value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                placeholder="New password (min 8 characters)"
+                className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+              <input type="password" required value={confirm} onChange={(e) => { setConfirm(e.target.value); setError(''); }}
+                placeholder="Confirm new password"
+                className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all" />
+              {error && <p className="text-xs text-red-400">{error}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-sm hover:from-blue-400 hover:to-cyan-400 disabled:opacity-60 transition-all">
+                {loading ? 'Saving…' : 'Update password'}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2138,11 +2213,30 @@ export default function LearnPortal() {
   const [manualUnlocks, setManualUnlocks] = useState<Set<string>>(new Set());
   const [authView, setAuthView] = useState<'signin' | 'forgot'>('signin');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+
+  // Detect recovery/invite flows from URL on initial load
+  useEffect(() => {
+    const hash = window.location.hash;
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const query = new URLSearchParams(window.location.search);
+    const urlType = params.get('type') || query.get('type');
+    const hasRecoveryToken = params.get('type') === 'recovery' || query.get('type') === 'recovery';
+    const hasInviteToken = params.get('type') === 'invite' || query.get('type') === 'invite';
+    if (hasRecoveryToken || hasInviteToken) {
+      setPasswordRecovery(true);
+    }
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setAuthed(!!data.session);
       if (data.session) {
+        // Don't set authed if we're in a recovery/invite flow
+        if (passwordRecovery) {
+          setAuthChecked(true);
+          return;
+        }
+        setAuthed(true);
         setUserId(data.session.user.id);
         const role = data.session.user.app_metadata?.role;
         setIsAdmin(role === 'admin');
@@ -2154,8 +2248,11 @@ export default function LearnPortal() {
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true);
+        setAuthed(false);
+        setAuthChecked(true);
         return;
       }
+      if (passwordRecovery) return;
       setAuthed(!!session);
       if (session) {
         setUserId(session.user.id);
@@ -2551,18 +2648,19 @@ export default function LearnPortal() {
     );
   }
 
+  if (passwordRecovery) {
+    return (
+      <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
+        <NavBar />
+        <ResetPassword onDone={() => {
+          setPasswordRecovery(false);
+          setAuthed(true);
+        }} />
+      </div>
+    );
+  }
+
   if (!authed) {
-    if (passwordRecovery) {
-      return (
-        <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
-          <NavBar />
-          <ResetPassword onDone={() => {
-            setPasswordRecovery(false);
-            setAuthed(true);
-          }} />
-        </div>
-      );
-    }
     return (
       <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
         <NavBar />
@@ -2590,6 +2688,9 @@ export default function LearnPortal() {
               Admin
             </span>
           )}
+          <button onClick={() => setShowChangePassword(true)} className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors">
+            <KeyRound className="w-3 h-3" /> Change password
+          </button>
           <button onClick={handleSignOut} className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors">
             <LogOut className="w-3 h-3" /> Sign out
           </button>
@@ -2744,6 +2845,10 @@ export default function LearnPortal() {
           Back to site
         </Link>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
 
       {showInviteModal && isAdmin && (
         <InviteLearnerModal
