@@ -424,7 +424,8 @@ export function SessionPrepModal({
 
       const journalQuestions = journalEntries
         .slice(0, 5)
-        .map((j) => j.entry_text.slice(0, 200));
+        .map((j) => (j.questions || '').slice(0, 200))
+        .filter((q) => q.length > 0);
 
       try {
         const result = await generateSessionPrep({
@@ -497,8 +498,11 @@ export function SessionPrepModal({
           )}
 
           {state === 'error' && (
-            <div className="rounded-lg bg-red-500/[0.08] border border-red-500/15 px-3 py-2.5">
-              <p className="text-xs text-red-400">{error}</p>
+            <div className="space-y-3">
+              <div className="rounded-lg bg-red-500/[0.08] border border-red-500/15 px-3 py-2.5">
+                <p className="text-xs text-red-400">{error}</p>
+              </div>
+              <button onClick={onClose} className="w-full px-4 py-2 rounded-lg border border-white/10 text-white/60 text-xs font-semibold hover:text-white/90 transition-all">Close</button>
             </div>
           )}
 

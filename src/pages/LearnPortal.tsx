@@ -1438,9 +1438,15 @@ function LearnerDetailTabs({
 }) {
   const hasJournal = !!selectedLearnerInfo.latestEntryDate;
   const hasAwaitingReview = learnerProgress.some((p) => p.status === 'submitted');
-  const [detailTab, setDetailTab] = useState<'progress' | 'journal' | 'coach'>(
-    hasAwaitingReview ? 'progress' : (hasJournal ? 'journal' : 'progress')
-  );
+  const [detailTab, setDetailTab] = useState<'progress' | 'journal' | 'coach'>('progress');
+  useEffect(() => {
+    if (hasAwaitingReview) {
+      setDetailTab('progress');
+    } else if (detailTab === 'progress' && hasJournal && !hasAwaitingReview) {
+      setDetailTab('journal');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasAwaitingReview, hasJournal]);
   const [requestChangesFor, setRequestChangesFor] = useState<ProgressRow | null>(null);
   const [startDateInput, setStartDateInput] = useState(selectedLearnerInfo.startDate || '');
   const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
@@ -1540,16 +1546,14 @@ function LearnerDetailTabs({
         >
           <NotebookPen className="w-3.5 h-3.5" /> Journal
         </button>
-        {(learnerQuizAttempts.length > 0 || learnerInterviewPractice.length > 0) && (
-          <button
-            onClick={() => setDetailTab('coach')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              detailTab === 'coach' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" /> Coach
-          </button>
-        )}
+        <button
+          onClick={() => setDetailTab('coach')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+            detailTab === 'coach' ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" /> Coach
+        </button>
       </div>
 
       {detailTab === 'progress' ? (
@@ -1836,7 +1840,7 @@ function AdminInterviewPreviewModal({ learnerId, journalEntries, approvedTasks, 
     (async () => {
       try {
         const { question: q } = await generateInterviewQuestion({
-          journal_entries: journalEntries.slice(0, 5).map((j) => ({ entry_text: j.entry_text, entry_date: j.entry_date })),
+          journal_entries: journalEntries.slice(0, 5).map((j) => ({ entry_text: j.questions || j.learned || j.built || '', entry_date: j.entry_date })),
           approved_tasks: approvedTasks.slice(0, 10),
           target_learner_id: learnerId,
         });

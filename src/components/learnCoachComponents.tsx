@@ -351,7 +351,7 @@ export function InterviewPracticeCard({ learnerId, journalEntries, approvedTasks
     setError('');
     try {
       const { question: q } = await generateInterviewQuestion({
-        journal_entries: journalEntries.slice(0, 5).map((j) => ({ entry_text: j.entry_text, entry_date: j.entry_date })),
+        journal_entries: journalEntries.slice(0, 5).map((j) => ({ entry_text: j.questions || j.learned || j.built || '', entry_date: j.entry_date })),
         approved_tasks: approvedTasks.slice(0, 10),
       });
       setQuestion(q);
