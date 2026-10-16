@@ -8,12 +8,13 @@ import {
 import type { Task, TaskResource, Week, JournalEntry, ProgressRow } from './coachTypes';
 
 // ── Instant Feedback Modal ──────────────────────────────
-export function CoachFeedbackModal({ task, resources, existingProgress, learnerNote, learnerLink, onClose, onComplete, onSkipWithoutFeedback }: {
+export function CoachFeedbackModal({ task, resources, existingProgress, learnerNote, learnerLink, attachmentFileNames, onClose, onComplete, onSkipWithoutFeedback }: {
   task: Task;
   resources: TaskResource[];
   existingProgress?: ProgressRow;
   learnerNote: string;
   learnerLink: string;
+  attachmentFileNames?: string[];
   onClose: () => void;
   onComplete: (feedback: CoachFeedback, answer: string) => Promise<void>;
   onSkipWithoutFeedback: () => Promise<void>;
@@ -35,6 +36,7 @@ export function CoachFeedbackModal({ task, resources, existingProgress, learnerN
           learner_note: learnerNote,
           learner_link: learnerLink || undefined,
           resources: resources.map((r) => ({ title: r.title, url: r.url, kind: r.kind })),
+          attachment_files: attachmentFileNames,
         });
         if (!cancelled) setFeedback(result);
       } catch (err) {

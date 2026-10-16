@@ -73,13 +73,14 @@ async function handleFeedback(
   isAdmin: boolean,
   body: Record<string, unknown>,
 ): Promise<Response> {
-  const { task_title, task_description, learner_note, learner_link, resources, target_learner_id } =
+  const { task_title, task_description, learner_note, learner_link, resources, attachment_files, target_learner_id } =
     body as {
       task_title: string;
       task_description?: string;
       learner_note: string;
       learner_link?: string;
       resources?: Array<{ title: string; url: string; kind: string }>;
+      attachment_files?: string[];
       target_learner_id?: string;
     };
 
@@ -121,6 +122,7 @@ ${task_description ? `DESCRIPTION: ${task_description}` : ""}
 
 LEARNER'S NOTE: ${learner_note}
 ${learner_link ? `LINK: ${learner_link}` : ""}
+${attachment_files && attachment_files.length > 0 ? `ATTACHED FILES: ${attachment_files.join(", ")}` : ""}
 
 RESOURCES:
 ${resourceList || "(none)"}`;

@@ -21,6 +21,12 @@ import {
   CoachFeedbackModal, StatusBadge, KnowledgeCheckCard, InterviewPracticeCard,
   AdminQuizSummary, AdminInterviewSummary,
 } from '../components/learnCoachComponents';
+import { AttachmentDropzone, AttachmentGallery } from '../components/AttachmentsUI';
+import {
+  type PendingFile, type AttachmentRow,
+  uploadFile, createAttachmentRecord, deleteAttachment,
+  fetchAttachments, getSignedUrl,
+} from '../lib/attachments';
 import { generateInterviewQuestion, gradeInterview, type QuizAttempt, type InterviewPracticeRow, type CoachFeedback } from '../lib/learnCoach';
 import {
   computeWeekUnlock, computeStreak, computeBadges, StreakBadgesSection,
@@ -706,17 +712,22 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 }
 
 // ── Task Complete Modal ────────────────────────────────
-function TaskCompleteModal({ task, computedDueDate, existingProgress, onClose, onSubmit }: {
+function TaskCompleteModal({ task, computedDueDate, existingProgress, onClose, onSubmit, learnerId, existingAttachments, onRemoveAttachment }: {
   task: Task;
   computedDueDate: string | null;
   existingProgress: ProgressRow | undefined;
   onClose: () => void;
-  onSubmit: (note: string, link: string) => Promise<void>;
+  onSubmit: (note: string, link: string, pendingFiles: PendingFile[]) => Promise<void>;
+  learnerId: string;
+  existingAttachments: AttachmentRow[];
+  onRemoveAttachment: (att: AttachmentRow) => void;
 }) {
   const [note, setNote] = useState(existingProgress?.completion_note || '');
   const [link, setLink] = useState(existingProgress?.link || '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const isApproved = existingProgress?.status === 'approved';
 
   const isEdit = existingProgress?.status === 'submitted';
   const isResubmit = existingProgress?.status === 'changes_requested';
@@ -733,7 +744,7 @@ function TaskCompleteModal({ task, computedDueDate, existingProgress, onClose, o
     }
     setSubmitting(true);
     setError('');
-    await onSubmit(note.trim(), link.trim());
+    await onSubmit(note.trim(), link.trim(), pendingFiles);
     setSubmitting(false);
   };
 
@@ -795,6 +806,23 @@ function TaskCompleteModal({ task, computedDueDate, existingProgress, onClose, o
                 className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wide mb-1.5">
+              Attachments <span className="text-white/20">(optional — up to 5 files, 10 MB each)</span>
+            </label>
+            <AttachmentDropzone
+              pendingFiles={pendingFiles}
+              onAddFiles={(files) => setPendingFiles((prev) => [...prev, ...files].slice(0, 5))}
+              onRemoveFile={(i) => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
+              existingAttachments={existingAttachments}
+              onRemoveExisting={isApproved ? undefined : (id) => {
+                const att = existingAttachments.find((a) => a.id === id);
+                if (att) onRemoveAttachment(att);
+              }}
+              disabled={isApproved}
+            />
           </div>
 
           {error && (
@@ -900,7 +928,7 @@ function LearnerDashboard({
   weeks: Week[];
   tasks: Task[];
   progress: Map<string, ProgressRow>;
-  onSubmitTask: (taskId: string, note: string, link: string, coachFeedback?: CoachFeedback, coachAnswer?: string) => Promise<void>;
+  onSubmitTask: (taskId: string, note: string, link: string, coachFeedback?: CoachFeedback, coachAnswer?: string, pendingFiles?: PendingFile[]) => Promise<void>;
   fullName: string;
   readOnly?: boolean;
   learnerId: string;
@@ -953,11 +981,20 @@ function LearnerDashboard({
   const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
   const [coachModal, setCoachModal] = useState<{ task: Task; note: string; link: string } | null>(null);
   const [celebrationWeek, setCelebrationWeek] = useState<number | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [taskAttachments, setTaskAttachments] = useState<AttachmentRow[]>([]);
   const entryCountByWeek = getEntryCountByWeek(journalEntries);
 
   const unlockSet = manualUnlocks || new Set<string>();
   const streak = useMemo(() => computeStreak(weeks, tasks, progress, startDate), [weeks, tasks, progress, startDate]);
   const badges = useMemo(() => computeBadges(weeks, tasks, progress, quizAttempts), [weeks, tasks, progress, quizAttempts]);
+
+  // Fetch attachments for all submitted tasks
+  useEffect(() => {
+    const progressIds = Array.from(progress.values()).filter((p) => p.id && p.id !== 'temp').map((p) => p.id);
+    if (progressIds.length === 0) { setTaskAttachments([]); return; }
+    fetchAttachments(progressIds).then(setTaskAttachments);
+  }, [progress]);
 
   // Track which weeks were previously incomplete to detect completion
   const prevWeekCompleteRef = useState<Set<number>>(new Set())[0];
@@ -1190,6 +1227,9 @@ function LearnerDashboard({
                                       <Link2 className="w-3 h-3" /> {p.link}
                                     </a>
                                   )}
+                                  {taskAttachments.filter((a) => a.progress_id === p.id).length > 0 && (
+                                    <AttachmentGallery attachments={taskAttachments.filter((a) => a.progress_id === p.id)} />
+                                  )}
                                   {p.submitted_at && (
                                     <p className="text-[10px] text-white/30 flex items-center gap-1">
                                       <Send className="w-2.5 h-2.5" />
@@ -1319,12 +1359,19 @@ function LearnerDashboard({
           task={activeTask}
           computedDueDate={taskDueDates.get(activeTask.id) || null}
           existingProgress={progress.get(activeTask.id)}
+          learnerId={learnerId}
+          existingAttachments={taskAttachments.filter((a) => a.progress_id === progress.get(activeTask.id)?.id)}
+          onRemoveAttachment={async (att) => {
+            await deleteAttachment(att);
+            setTaskAttachments((prev) => prev.filter((a) => a.id !== att.id));
+          }}
           onClose={() => setActiveTask(null)}
-          onSubmit={async (note, link) => {
+          onSubmit={async (note, link, files) => {
+            setPendingFiles(files);
             if (!readOnly) {
               setCoachModal({ task: activeTask, note, link });
             } else {
-              await onSubmitTask(activeTask.id, note, link);
+              await onSubmitTask(activeTask.id, note, link, undefined, undefined, files);
               setActiveTask(null);
             }
           }}
@@ -1339,19 +1386,22 @@ function LearnerDashboard({
           existingProgress={progress.get(coachModal.task.id)}
           learnerNote={coachModal.note}
           learnerLink={coachModal.link}
+          attachmentFileNames={pendingFiles.map((pf) => pf.file.name)}
           onClose={() => {
             setCoachModal(null);
             setActiveTask(null);
           }}
           onComplete={async (feedback: CoachFeedback, answer: string) => {
-            await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link, feedback, answer);
+            await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link, feedback, answer, pendingFiles);
             setCoachModal(null);
             setActiveTask(null);
+            setPendingFiles([]);
           }}
           onSkipWithoutFeedback={async () => {
-            await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link);
+            await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link, undefined, undefined, pendingFiles);
             setCoachModal(null);
             setActiveTask(null);
+            setPendingFiles([]);
           }}
         />
       )}
@@ -1527,6 +1577,7 @@ function LearnerDetailTabs({
   const [resourceEditFor, setResourceEditFor] = useState<{ taskId: string; resource: TaskResource | null } | null>(null);
   const [showInterviewPreview, setShowInterviewPreview] = useState(false);
   const [showSessionPrep, setShowSessionPrep] = useState(false);
+  const [adminTaskAttachments, setAdminTaskAttachments] = useState<AttachmentRow[]>([]);
   const progressMap = new Map(learnerProgress.map((p) => [p.task_id, p]));
   const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
   const adminBadges = useMemo(() => computeBadges(weeks, tasks, progressMap, learnerQuizAttempts), [weeks, tasks, progressMap, learnerQuizAttempts]);
@@ -1553,6 +1604,12 @@ function LearnerDetailTabs({
   const approvedCount = learnerProgress.filter((p) => p.status === 'approved').length;
   const submittedCount = learnerProgress.filter((p) => p.status === 'submitted').length;
   const pct = tasks.length > 0 ? Math.round((approvedCount / tasks.length) * 100) : 0;
+
+  useEffect(() => {
+    const progressIds = learnerProgress.filter((p) => p.id).map((p) => p.id);
+    if (progressIds.length === 0) { setAdminTaskAttachments([]); return; }
+    fetchAttachments(progressIds).then(setAdminTaskAttachments);
+  }, [learnerProgress]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
@@ -1720,6 +1777,9 @@ function LearnerDetailTabs({
                                      className="flex items-center gap-1.5 text-[11px] text-cyan-400/70 hover:text-cyan-400 transition-colors">
                                     <Link2 className="w-3 h-3" /> {p.link}
                                   </a>
+                                )}
+                                {adminTaskAttachments.filter((a) => a.progress_id === p.id).length > 0 && (
+                                  <AttachmentGallery attachments={adminTaskAttachments.filter((a) => a.progress_id === p.id)} />
                                 )}
                                 {p.submitted_at && (
                                   <p className="text-[10px] text-white/30 flex items-center gap-1">
@@ -2447,8 +2507,20 @@ export default function LearnPortal() {
     setLearnerProgress((data || []) as ProgressRow[]);
   }, []);
 
+  // ── Upload attachments after progress row is created ──
+  const uploadAttachments = async (learnerId: string, progressId: string | null, journalEntryId: string | null, files: PendingFile[]) => {
+    const folderId = progressId || journalEntryId || crypto.randomUUID();
+    for (const pf of files) {
+      if (pf.error) continue;
+      const uploaded = await uploadFile(learnerId, folderId, pf.file);
+      if (uploaded) {
+        await createAttachmentRecord(learnerId, progressId, journalEntryId, uploaded);
+      }
+    }
+  };
+
   // ── Task submission handler ──
-  const handleSubmitTask = async (taskId: string, note: string, link: string, coachFeedback?: CoachFeedback, coachAnswer?: string) => {
+  const handleSubmitTask = async (taskId: string, note: string, link: string, coachFeedback?: CoachFeedback, coachAnswer?: string, pendingFiles?: PendingFile[]) => {
     const existing = progressMap.get(taskId);
     const now = new Date().toISOString();
     const payload: Record<string, unknown> = {
@@ -2498,6 +2570,8 @@ export default function LearnPortal() {
           next.set(taskId, existing);
           return next;
         });
+      } else if (pendingFiles && pendingFiles.length > 0) {
+        await uploadAttachments(userId, existing.id, null, pendingFiles);
       }
     } else {
       const { data, error } = await supabase.from('lp_progress').insert({
@@ -2517,6 +2591,9 @@ export default function LearnPortal() {
           next.set(taskId, data[0] as ProgressRow);
           return next;
         });
+        if (pendingFiles && pendingFiles.length > 0) {
+          await uploadAttachments(userId, data[0].id, null, pendingFiles);
+        }
       }
     }
   };

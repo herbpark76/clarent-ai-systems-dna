@@ -35,6 +35,7 @@ export async function getCoachFeedback(params: {
   learner_note: string;
   learner_link?: string;
   resources?: Array<{ title: string; url: string; kind: string }>;
+  attachment_files?: string[];
   target_learner_id?: string;
 }): Promise<CoachFeedback> {
   return callCoach({ mode: 'feedback', ...params }) as Promise<CoachFeedback>;

@@ -3,6 +3,12 @@ import {
   Plus, FileDown, MessageSquare, Clock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { AttachmentDropzone, AttachmentGallery } from './AttachmentsUI';
+import {
+  type PendingFile, type AttachmentRow,
+  uploadFile, createAttachmentRecord, deleteAttachment,
+  fetchAttachmentsByJournalIds,
+} from '../lib/attachments';
 
 // ── Types ──────────────────────────────────────────────
 export interface JournalEntry {
@@ -57,10 +63,11 @@ function fmtDate(d: string): string {
 
 // ── New Entry Form ─────────────────────────────────────
 function EntryForm({
-  weeks, onSave, onCancel,
+  weeks, onSave, onCancel, learnerId,
 }: {
   weeks: Week[];
-  onSave: (data: { week_id: string; entry_date: string; built: string; broke: string; learned: string; questions: string; hours: string }) => Promise<void>;
+  learnerId: string;
+  onSave: (data: { week_id: string; entry_date: string; built: string; broke: string; learned: string; questions: string; hours: string }, pendingFiles: PendingFile[]) => Promise<void>;
   onCancel: () => void;
 }) {
   const currentWeek = weeks.find((w) => isCurrentWeek(w));
@@ -72,6 +79,7 @@ function EntryForm({
   const [questions, setQuestions] = useState('');
   const [hours, setHours] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
 
   const inputCls = 'w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/20 text-sm focus:outline-none focus:border-blue-500/50 transition-all';
   const labelCls = 'block text-xs font-semibold text-white/50 mb-1.5';
@@ -80,7 +88,7 @@ function EntryForm({
     e.preventDefault();
     if (!built.trim() && !broke.trim() && !learned.trim()) return;
     setSaving(true);
-    await onSave({ week_id: weekId, entry_date: entryDate, built, broke, learned, questions, hours });
+    await onSave({ week_id: weekId, entry_date: entryDate, built, broke, learned, questions, hours }, pendingFiles);
     setSaving(false);
   };
 
@@ -127,6 +135,15 @@ function EntryForm({
           <label className={labelCls}>Hours (optional)</label>
           <input type="number" step="0.5" min="0" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="3.5" className={inputCls} />
         </div>
+      </div>
+
+      <div>
+        <label className={labelCls}>Attachments (optional — up to 5 files, 10 MB each)</label>
+        <AttachmentDropzone
+          pendingFiles={pendingFiles}
+          onAddFiles={(files) => setPendingFiles((prev) => [...prev, ...files].slice(0, 5))}
+          onRemoveFile={(i) => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
+        />
       </div>
 
       <div className="flex items-center gap-3 pt-1">
@@ -177,13 +194,14 @@ function CommentBox({ entryId, onReply }: { entryId: string; onReply: (entryId: 
 
 // ── Entry Card ─────────────────────────────────────────
 function EntryCard({
-  entry, comments, weekTitle, showCommentBox, onReply,
+  entry, comments, weekTitle, showCommentBox, onReply, attachments,
 }: {
   entry: JournalEntry;
   comments: JournalComment[];
   weekTitle: string;
   showCommentBox: boolean;
   onReply: (entryId: string, body: string) => Promise<void>;
+  attachments?: AttachmentRow[];
 }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
@@ -225,6 +243,9 @@ function EntryCard({
             <p className="text-sm text-white/75 leading-relaxed whitespace-pre-wrap">{entry.questions}</p>
           </div>
         )}
+        {attachments && attachments.length > 0 && (
+          <AttachmentGallery attachments={attachments} />
+        )}
       </div>
 
       {comments.length > 0 && (
@@ -259,6 +280,7 @@ export function TraineeJournal({
 }) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [comments, setComments] = useState<JournalComment[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -278,15 +300,18 @@ export function TraineeJournal({
         .in('entry_id', entryIds)
         .order('created_at', { ascending: true });
       setComments((c || []) as JournalComment[]);
+      const atts = await fetchAttachmentsByJournalIds(entryIds);
+      setAttachments(atts);
     } else {
       setComments([]);
+      setAttachments([]);
     }
     setLoading(false);
   }, [learnerId]);
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
-  const handleSave = async (d: { week_id: string; entry_date: string; built: string; broke: string; learned: string; questions: string; hours: string }) => {
+  const handleSave = async (d: { week_id: string; entry_date: string; built: string; broke: string; learned: string; questions: string; hours: string }, pendingFiles: PendingFile[]) => {
     const { data } = await supabase.from('lp_journal_entries').insert({
       learner_id: learnerId,
       week_id: d.week_id || null,
@@ -298,6 +323,14 @@ export function TraineeJournal({
       hours: d.hours ? parseFloat(d.hours) : null,
     }).select('*');
     if (data && data.length > 0) {
+      const entryId = data[0].id;
+      for (const pf of pendingFiles) {
+        if (pf.error) continue;
+        const uploaded = await uploadFile(learnerId, entryId, pf.file);
+        if (uploaded) {
+          await createAttachmentRecord(learnerId, null, entryId, uploaded);
+        }
+      }
       setShowForm(false);
       loadEntries();
     }
@@ -384,7 +417,7 @@ export function TraineeJournal({
       </div>
 
       {showForm && (
-        <EntryForm weeks={weeks} onSave={handleSave} onCancel={() => setShowForm(false)} />
+        <EntryForm weeks={weeks} learnerId={learnerId} onSave={handleSave} onCancel={() => setShowForm(false)} />
       )}
 
       {/* Entries grouped by week, newest week first */}
@@ -411,6 +444,7 @@ export function TraineeJournal({
                       key={entry.id}
                       entry={entry}
                       comments={comments.filter((c) => c.entry_id === entry.id)}
+                      attachments={attachments.filter((a) => a.journal_entry_id === entry.id)}
                       weekTitle={`Week ${week.week_number}`}
                       showCommentBox
                       onReply={handleReply}
@@ -436,6 +470,7 @@ export function AdminJournal({
 }) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [comments, setComments] = useState<JournalComment[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -454,8 +489,11 @@ export function AdminJournal({
         .in('entry_id', entryIds)
         .order('created_at', { ascending: true });
       setComments((c || []) as JournalComment[]);
+      const atts = await fetchAttachmentsByJournalIds(entryIds);
+      setAttachments(atts);
     } else {
       setComments([]);
+      setAttachments([]);
     }
     setLoading(false);
   }, [learnerId]);
@@ -513,6 +551,7 @@ export function AdminJournal({
                     key={entry.id}
                     entry={entry}
                     comments={comments.filter((c) => c.entry_id === entry.id)}
+                    attachments={attachments.filter((a) => a.journal_entry_id === entry.id)}
                     weekTitle={`Week ${week.week_number}`}
                     showCommentBox
                     onReply={handleComment}
