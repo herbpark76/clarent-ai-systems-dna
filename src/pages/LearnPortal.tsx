@@ -983,6 +983,7 @@ function LearnerDashboard({
   const [celebrationWeek, setCelebrationWeek] = useState<number | null>(null);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [taskAttachments, setTaskAttachments] = useState<AttachmentRow[]>([]);
+  const [submitError, setSubmitError] = useState('');
   const entryCountByWeek = getEntryCountByWeek(journalEntries);
 
   const unlockSet = manualUnlocks || new Set<string>();
@@ -1368,11 +1369,16 @@ function LearnerDashboard({
           onClose={() => setActiveTask(null)}
           onSubmit={async (note, link, files) => {
             setPendingFiles(files);
+            setSubmitError('');
             if (!readOnly) {
               setCoachModal({ task: activeTask, note, link });
             } else {
-              await onSubmitTask(activeTask.id, note, link, undefined, undefined, files);
-              setActiveTask(null);
+              try {
+                await onSubmitTask(activeTask.id, note, link, undefined, undefined, files);
+                setActiveTask(null);
+              } catch (err) {
+                setSubmitError((err as Error).message || 'Failed to save. Please try again.');
+              }
             }
           }}
         />
@@ -1392,18 +1398,35 @@ function LearnerDashboard({
             setActiveTask(null);
           }}
           onComplete={async (feedback: CoachFeedback, answer: string) => {
-            await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link, feedback, answer, pendingFiles);
-            setCoachModal(null);
-            setActiveTask(null);
-            setPendingFiles([]);
+            setSubmitError('');
+            try {
+              await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link, feedback, answer, pendingFiles);
+              setCoachModal(null);
+              setActiveTask(null);
+              setPendingFiles([]);
+            } catch (err) {
+              setSubmitError((err as Error).message || 'Failed to save. Please try again.');
+            }
           }}
           onSkipWithoutFeedback={async () => {
-            await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link, undefined, undefined, pendingFiles);
-            setCoachModal(null);
-            setActiveTask(null);
-            setPendingFiles([]);
+            setSubmitError('');
+            try {
+              await onSubmitTask(coachModal.task.id, coachModal.note, coachModal.link, undefined, undefined, pendingFiles);
+              setCoachModal(null);
+              setActiveTask(null);
+              setPendingFiles([]);
+            } catch (err) {
+              setSubmitError((err as Error).message || 'Failed to save. Please try again.');
+            }
           }}
         />
+      )}
+
+      {submitError && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 rounded-lg bg-red-500/90 text-white text-xs font-semibold shadow-2xl max-w-md">
+          {submitError}
+          <button onClick={() => setSubmitError('')} className="ml-3 text-white/70 hover:text-white">Dismiss</button>
+        </div>
       )}
 
       {celebrationWeek !== null && (
@@ -2523,24 +2546,39 @@ export default function LearnPortal() {
   const handleSubmitTask = async (taskId: string, note: string, link: string, coachFeedback?: CoachFeedback, coachAnswer?: string, pendingFiles?: PendingFile[]) => {
     const existing = progressMap.get(taskId);
     const now = new Date().toISOString();
-    const payload: Record<string, unknown> = {
+
+    // Build payload — only include editable columns on update to avoid trigger rejections
+    const isFirstSubmission = !existing || existing.id === 'temp';
+    const updatePayload: Record<string, unknown> = {
       status: 'submitted',
       completion_note: note,
       link: link || null,
-      coach_feedback: coachFeedback?.whats_good ? `Good: ${coachFeedback.whats_good}\n\nMissing: ${coachFeedback.whats_missing}` : null,
-      coach_question: coachFeedback?.follow_up || null,
-      coach_answer: coachAnswer || null,
-      coach_completed: !!(coachFeedback && coachAnswer),
     };
 
-    if (!existing || existing.status !== 'submitted') {
-      payload.submitted_at = now;
+    // Only include submitted_at if this is a new submission or resubmission from changes_requested
+    if (isFirstSubmission || existing.status !== 'submitted') {
+      updatePayload.submitted_at = now;
     }
 
+    // Only include coach columns on first submission (trigger reverts them on update anyway,
+    // but we avoid sending them to keep the update clean)
+    if (isFirstSubmission) {
+      updatePayload.coach_feedback = coachFeedback?.whats_good ? `Good: ${coachFeedback.whats_good}\n\nMissing: ${coachFeedback.whats_missing}` : null;
+      updatePayload.coach_question = coachFeedback?.follow_up || null;
+      updatePayload.coach_answer = coachAnswer || null;
+      updatePayload.coach_completed = !!(coachFeedback && coachAnswer);
+    } else {
+      // On edit: only update coach_answer (the one coach field learners can change)
+      if (coachAnswer !== undefined) {
+        updatePayload.coach_answer = coachAnswer || null;
+      }
+    }
+
+    // Optimistic update
     setProgressMap((prev) => {
       const next = new Map(prev);
       if (existing) {
-        next.set(taskId, { ...existing, ...payload } as ProgressRow);
+        next.set(taskId, { ...existing, ...updatePayload } as ProgressRow);
       } else {
         next.set(taskId, {
           id: 'temp',
@@ -2550,34 +2588,47 @@ export default function LearnPortal() {
           completed_at: null,
           completion_note: note,
           link: link || null,
-          submitted_at: payload.submitted_at as string,
+          submitted_at: updatePayload.submitted_at as string,
           reviewed_at: null,
           review_comment: null,
-          coach_feedback: payload.coach_feedback as string | null,
-          coach_question: payload.coach_question as string | null,
-          coach_answer: payload.coach_answer as string | null,
-          coach_completed: payload.coach_completed as boolean | null,
+          coach_feedback: null,
+          coach_question: null,
+          coach_answer: coachAnswer || null,
+          coach_completed: null,
         });
       }
       return next;
     });
 
-    if (existing && existing.id !== 'temp') {
-      const { error } = await supabase.from('lp_progress').update(payload).eq('id', existing.id);
+    if (!isFirstSubmission) {
+      const { data: updated, error } = await supabase.from('lp_progress')
+        .update(updatePayload)
+        .eq('id', existing.id)
+        .select('*');
       if (error) {
+        // Revert optimistic update
         setProgressMap((prev) => {
           const next = new Map(prev);
           next.set(taskId, existing);
           return next;
         });
-      } else if (pendingFiles && pendingFiles.length > 0) {
-        await uploadAttachments(userId, existing.id, null, pendingFiles);
+        throw new Error(error.message);
+      } else if (updated && updated.length > 0) {
+        // Refresh from server to get the actual saved state
+        setProgressMap((prev) => {
+          const next = new Map(prev);
+          next.set(taskId, updated[0] as ProgressRow);
+          return next;
+        });
+        if (pendingFiles && pendingFiles.length > 0) {
+          await uploadAttachments(userId, existing.id, null, pendingFiles);
+        }
       }
     } else {
       const { data, error } = await supabase.from('lp_progress').insert({
         learner_id: userId,
         task_id: taskId,
-        ...payload,
+        ...updatePayload,
       }).select('*');
       if (error) {
         setProgressMap((prev) => {
@@ -2585,6 +2636,7 @@ export default function LearnPortal() {
           next.delete(taskId);
           return next;
         });
+        throw new Error(error.message);
       } else if (data && data.length > 0) {
         setProgressMap((prev) => {
           const next = new Map(prev);

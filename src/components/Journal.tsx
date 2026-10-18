@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, FileDown, MessageSquare, Clock,
+  Plus, FileDown, MessageSquare, Clock, Pencil, Trash2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { AttachmentDropzone, AttachmentGallery } from './AttachmentsUI';
@@ -63,21 +63,22 @@ function fmtDate(d: string): string {
 
 // ── New Entry Form ─────────────────────────────────────
 function EntryForm({
-  weeks, onSave, onCancel, learnerId,
+  weeks, onSave, onCancel, learnerId, initialEntry,
 }: {
   weeks: Week[];
   learnerId: string;
+  initialEntry?: JournalEntry;
   onSave: (data: { week_id: string; entry_date: string; built: string; broke: string; learned: string; questions: string; hours: string }, pendingFiles: PendingFile[]) => Promise<void>;
   onCancel: () => void;
 }) {
   const currentWeek = weeks.find((w) => isCurrentWeek(w));
-  const [weekId, setWeekId] = useState(currentWeek?.id || weeks[0]?.id || '');
-  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
-  const [built, setBuilt] = useState('');
-  const [broke, setBroke] = useState('');
-  const [learned, setLearned] = useState('');
-  const [questions, setQuestions] = useState('');
-  const [hours, setHours] = useState('');
+  const [weekId, setWeekId] = useState(initialEntry?.week_id || currentWeek?.id || weeks[0]?.id || '');
+  const [entryDate, setEntryDate] = useState(initialEntry?.entry_date || new Date().toISOString().slice(0, 10));
+  const [built, setBuilt] = useState(initialEntry?.built || '');
+  const [broke, setBroke] = useState(initialEntry?.broke || '');
+  const [learned, setLearned] = useState(initialEntry?.learned || '');
+  const [questions, setQuestions] = useState(initialEntry?.questions || '');
+  const [hours, setHours] = useState(initialEntry?.hours?.toString() || '');
   const [saving, setSaving] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
 
@@ -96,7 +97,7 @@ function EntryForm({
     <form onSubmit={handleSubmit} className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 space-y-4">
       <div className="flex items-center gap-2 mb-1">
         <Plus className="w-4 h-4 text-cyan-400" />
-        <h3 className="text-sm font-bold text-white">New Journal Entry</h3>
+        <h3 className="text-sm font-bold text-white">{initialEntry ? 'Edit Journal Entry' : 'New Journal Entry'}</h3>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -149,7 +150,7 @@ function EntryForm({
       <div className="flex items-center gap-3 pt-1">
         <button type="submit" disabled={saving}
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-xs hover:from-blue-400 hover:to-cyan-400 disabled:opacity-60 transition-all">
-          {saving ? 'Saving…' : 'Save entry'}
+          {saving ? 'Saving…' : initialEntry ? 'Update entry' : 'Save entry'}
         </button>
         <button type="button" onClick={onCancel}
           className="px-4 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/50 text-xs font-semibold hover:text-white/80 hover:bg-white/[0.06] transition-all">
@@ -194,7 +195,7 @@ function CommentBox({ entryId, onReply }: { entryId: string; onReply: (entryId: 
 
 // ── Entry Card ─────────────────────────────────────────
 function EntryCard({
-  entry, comments, weekTitle, showCommentBox, onReply, attachments,
+  entry, comments, weekTitle, showCommentBox, onReply, attachments, onEdit, onDelete, canEdit,
 }: {
   entry: JournalEntry;
   comments: JournalComment[];
@@ -202,6 +203,9 @@ function EntryCard({
   showCommentBox: boolean;
   onReply: (entryId: string, body: string) => Promise<void>;
   attachments?: AttachmentRow[];
+  onEdit?: (entry: JournalEntry) => void;
+  onDelete?: (entryId: string) => void;
+  canEdit?: boolean;
 }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
@@ -215,6 +219,16 @@ function EntryCard({
               <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" /> {entry.hours}h</span>
             )}
             <span>{fmtDate(entry.entry_date)}</span>
+            {canEdit && onEdit && (
+              <button onClick={() => onEdit(entry)} className="text-white/30 hover:text-cyan-400 transition-colors" title="Edit entry">
+                <Pencil className="w-3 h-3" />
+              </button>
+            )}
+            {canEdit && onDelete && (
+              <button onClick={() => { if (confirm('Delete this journal entry?')) onDelete(entry.id); }} className="text-white/30 hover:text-red-400 transition-colors" title="Delete entry">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -282,6 +296,8 @@ export function TraineeJournal({
   const [comments, setComments] = useState<JournalComment[]>([]);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
+  const [saveError, setSaveError] = useState('');
   const [loading, setLoading] = useState(true);
 
   const loadEntries = useCallback(async () => {
@@ -312,7 +328,8 @@ export function TraineeJournal({
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
   const handleSave = async (d: { week_id: string; entry_date: string; built: string; broke: string; learned: string; questions: string; hours: string }, pendingFiles: PendingFile[]) => {
-    const { data } = await supabase.from('lp_journal_entries').insert({
+    setSaveError('');
+    const { data, error } = await supabase.from('lp_journal_entries').insert({
       learner_id: learnerId,
       week_id: d.week_id || null,
       entry_date: d.entry_date,
@@ -322,6 +339,10 @@ export function TraineeJournal({
       questions: d.questions || null,
       hours: d.hours ? parseFloat(d.hours) : null,
     }).select('*');
+    if (error) {
+      setSaveError(error.message || 'Failed to save entry.');
+      return;
+    }
     if (data && data.length > 0) {
       const entryId = data[0].id;
       for (const pf of pendingFiles) {
@@ -334,6 +355,45 @@ export function TraineeJournal({
       setShowForm(false);
       loadEntries();
     }
+  };
+
+  const handleEdit = async (d: { week_id: string; entry_date: string; built: string; broke: string; learned: string; questions: string; hours: string }, pendingFiles: PendingFile[]) => {
+    if (!editingEntry) return;
+    setSaveError('');
+    const { data, error } = await supabase.from('lp_journal_entries').update({
+      week_id: d.week_id || null,
+      entry_date: d.entry_date,
+      built: d.built,
+      broke: d.broke,
+      learned: d.learned,
+      questions: d.questions || null,
+      hours: d.hours ? parseFloat(d.hours) : null,
+    }).eq('id', editingEntry.id).select('*');
+    if (error) {
+      setSaveError(error.message || 'Failed to update entry.');
+      return;
+    }
+    if (data && data.length > 0) {
+      for (const pf of pendingFiles) {
+        if (pf.error) continue;
+        const uploaded = await uploadFile(learnerId, editingEntry.id, pf.file);
+        if (uploaded) {
+          await createAttachmentRecord(learnerId, null, editingEntry.id, uploaded);
+        }
+      }
+      setEditingEntry(null);
+      loadEntries();
+    }
+  };
+
+  const handleDelete = async (entryId: string) => {
+    setSaveError('');
+    const { error } = await supabase.from('lp_journal_entries').delete().eq('id', entryId);
+    if (error) {
+      setSaveError(error.message || 'Failed to delete entry.');
+      return;
+    }
+    loadEntries();
   };
 
   const handleReply = async (entryId: string, body: string) => {
@@ -420,6 +480,17 @@ export function TraineeJournal({
         <EntryForm weeks={weeks} learnerId={learnerId} onSave={handleSave} onCancel={() => setShowForm(false)} />
       )}
 
+      {editingEntry && (
+        <EntryForm weeks={weeks} learnerId={learnerId} initialEntry={editingEntry} onSave={handleEdit} onCancel={() => setEditingEntry(null)} />
+      )}
+
+      {saveError && (
+        <div className="rounded-lg bg-red-500/[0.08] border border-red-500/15 px-3 py-2 text-xs text-red-400">
+          {saveError}
+          <button onClick={() => setSaveError('')} className="ml-2 text-red-400/60 hover:text-red-400">Dismiss</button>
+        </div>
+      )}
+
       {/* Entries grouped by week, newest week first */}
       {entries.length === 0 && !showForm ? (
         <div className="text-center py-12 rounded-xl border border-white/[0.05] bg-white/[0.01]">
@@ -448,6 +519,9 @@ export function TraineeJournal({
                       weekTitle={`Week ${week.week_number}`}
                       showCommentBox
                       onReply={handleReply}
+                      canEdit
+                      onEdit={(e) => setEditingEntry(e)}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>
