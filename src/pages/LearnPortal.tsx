@@ -278,9 +278,60 @@ function formatDateRange(start: string | null, end: string | null): string {
 
 function getInitials(name: string): string {
   if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
+  const parts = name.trim().split(/\s+/).filter((p) => p.length > 0);
+  if (parts.length === 0) return '?';
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+// ── Data normalization helpers (jsonb can arrive as strings) ──
+
+function normalizeQuizAttempts(data: unknown[] | null): QuizAttempt[] {
+  if (!data || !Array.isArray(data)) return [];
+  return data.map((row): QuizAttempt => {
+    const r = row as Record<string, unknown>;
+    let questions = r.questions;
+    if (typeof questions === 'string') {
+      try { questions = JSON.parse(questions); } catch { questions = []; }
+    }
+    let answers = r.answers;
+    if (typeof answers === 'string') {
+      try { answers = JSON.parse(answers); } catch { answers = null; }
+    }
+    return {
+      id: r.id as string,
+      learner_id: r.learner_id as string,
+      week_id: r.week_id as string,
+      questions: Array.isArray(questions) ? questions as QuizAttempt['questions'] : [],
+      answers: Array.isArray(answers) ? answers as string[] : null,
+      score: typeof r.score === 'number' ? r.score : null,
+      passed: typeof r.passed === 'boolean' ? r.passed : null,
+      feedback: typeof r.feedback === 'string' ? r.feedback : null,
+      created_at: r.created_at as string,
+    };
+  });
+}
+
+function normalizeInterviewPractice(data: unknown[] | null): InterviewPracticeRow[] {
+  if (!data || !Array.isArray(data)) return [];
+  return data.map((row): InterviewPracticeRow => {
+    const r = row as Record<string, unknown>;
+    let scores = r.scores;
+    if (typeof scores === 'string') {
+      try { scores = JSON.parse(scores); } catch { scores = null; }
+    }
+    return {
+      id: r.id as string,
+      learner_id: r.learner_id as string,
+      question: r.question as string,
+      answer: typeof r.answer === 'string' ? r.answer : null,
+      scores: scores && typeof scores === 'object' && !Array.isArray(scores)
+        ? scores as InterviewPracticeRow['scores']
+        : null,
+      feedback: typeof r.feedback === 'string' ? r.feedback : null,
+      created_at: r.created_at as string,
+    };
+  });
 }
 
 // ── Status Icon ────────────────────────────────────────
@@ -998,7 +1049,7 @@ function LearnerDashboard({
   useEffect(() => {
     const progressIds = Array.from(progress.values()).filter((p) => p.id && p.id !== 'temp').map((p) => p.id);
     if (progressIds.length === 0) { setTaskAttachments([]); return; }
-    fetchAttachments(progressIds).then(setTaskAttachments);
+    fetchAttachments(progressIds).then(setTaskAttachments).catch(() => setTaskAttachments([]));
   }, [progress]);
 
   // Track which weeks were previously incomplete to detect completion
@@ -2510,9 +2561,9 @@ export default function LearnPortal() {
         setLearnerJournalEntries(journalRows);
 
         // Set quiz and interview data for admin detail views
-        if (!cancelled) setLearnerQuizAttempts(allQuizRows);
+        if (!cancelled) setLearnerQuizAttempts(normalizeQuizAttempts(allQuizAttempts));
         const { data: allInterview } = await supabase.from('lp_interview_practice').select('*').order('created_at', { ascending: false });
-        if (!cancelled) setLearnerInterviewPractice((allInterview || []) as InterviewPracticeRow[]);
+        if (!cancelled) setLearnerInterviewPractice(normalizeInterviewPractice(allInterview));
 
         // Add latest journal entry date per learner
         const journalByLearner = new Map<string, JournalEntry[]>();
@@ -2553,13 +2604,13 @@ export default function LearnPortal() {
         if (cancelled) return;
         setJournalEntries((jData || []) as JournalEntry[]);
 
-        // Load quiz attempts
+        // Load quiz attempts — normalize jsonb fields in case they come back as strings
         const { data: qaData } = await supabase.from('lp_quiz_attempts').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
-        if (!cancelled) setQuizAttempts((qaData || []) as QuizAttempt[]);
+        if (!cancelled) setQuizAttempts(normalizeQuizAttempts(qaData));
 
-        // Load interview practice
+        // Load interview practice — normalize jsonb scores in case they come back as strings
         const { data: ipData } = await supabase.from('lp_interview_practice').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
-        if (!cancelled) setInterviewPractice((ipData || []) as InterviewPracticeRow[]);
+        if (!cancelled) setInterviewPractice(normalizeInterviewPractice(ipData));
 
         // Load own manual unlocks (for week locking display)
         if (!cancelled) {
@@ -3015,11 +3066,11 @@ export default function LearnPortal() {
               manualUnlocks={manualUnlocks}
               onQuizPassed={async () => {
                 const { data: qaData } = await supabase.from('lp_quiz_attempts').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
-                setQuizAttempts((qaData || []) as QuizAttempt[]);
+                setQuizAttempts(normalizeQuizAttempts(qaData));
               }}
               onNewInterviewAttempt={async () => {
                 const { data: ipData } = await supabase.from('lp_interview_practice').select('*').eq('learner_id', userId).order('created_at', { ascending: false });
-                setInterviewPractice((ipData || []) as InterviewPracticeRow[]);
+                setInterviewPractice(normalizeInterviewPractice(ipData));
               }}
             />
           )}
