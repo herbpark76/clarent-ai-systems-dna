@@ -14,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const SITE_ORIGIN = 'https://aisystems.clarenttech.com';
 
-function loadEnv() {
+function loadEnvFile() {
   const envPath = join(ROOT, '.env');
   if (!existsSync(envPath)) return {};
   const env = {};
@@ -67,58 +67,76 @@ function getConceptIds() {
   return ids;
 }
 
-async function getPublishedEntries(env) {
-  const url = env.VITE_SUPABASE_URL;
-  const anonKey = env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return [];
-
+async function getPublishedEntries(url, anonKey) {
   const supabase = createClient(url, anonKey);
-  const { data, error } = await supabase
-    .from('signal_desk_entries')
-    .select('slug, created_at, source_date')
-    .eq('status', 'published')
-    .in('duplicate_status', ['none', 'separate'])
-    .order('created_at', { ascending: false });
+  const allEntries = [];
+  const PAGE_SIZE = 1000;
+  let offset = 0;
 
-  if (error) {
-    console.warn('[sitemap] DB query failed, skipping Signal Desk entries:', error.message);
-    return [];
+  while (true) {
+    const { data, error } = await supabase
+      .from('signal_desk_entries')
+      .select('slug, created_at, source_date')
+      .eq('status', 'published')
+      .in('duplicate_status', ['none', 'separate'])
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (error) {
+      console.warn(`[sitemap] WARNING: DB query failed at offset ${offset}: ${error.message}`);
+      console.warn('[sitemap] Signal Desk entries will be missing from the sitemap.');
+      return [];
+    }
+
+    if (!data || data.length === 0) break;
+    allEntries.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
   }
-  return (data || []).filter((e) => e.slug);
+
+  const withSlugs = allEntries.filter((e) => e.slug);
+  if (withSlugs.length === 0) {
+    console.warn('[sitemap] WARNING: DB query succeeded but returned 0 published entries with slugs.');
+    console.warn('[sitemap] Check that signal_desk_entries has published rows with non-null slugs.');
+  }
+  return withSlugs;
 }
 
 async function main() {
-  const env = loadEnv();
+  // Vercel production env vars take priority; fall back to .env for local builds
+  const fileEnv = loadEnvFile();
+  const url = process.env.VITE_SUPABASE_URL || fileEnv.VITE_SUPABASE_URL;
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || fileEnv.VITE_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    console.warn('[sitemap] WARNING: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY not found in process.env or .env');
+    console.warn('[sitemap] Signal Desk entries will be missing from the sitemap.');
+  }
+
   const today = new Date().toISOString().split('T')[0];
   const urls = [];
 
-  // Homepage
   urls.push({ loc: `${SITE_ORIGIN}/`, lastmod: today, priority: '1.0' });
-
-  // Signal Desk landing
   urls.push({ loc: `${SITE_ORIGIN}/signal-desk`, lastmod: today, priority: '0.8' });
-
-  // Static pages
   urls.push({ loc: `${SITE_ORIGIN}/labs`, lastmod: today, priority: '0.6' });
   urls.push({ loc: `${SITE_ORIGIN}/use-cases`, lastmod: today, priority: '0.6' });
   urls.push({ loc: `${SITE_ORIGIN}/models`, lastmod: today, priority: '0.6' });
   urls.push({ loc: `${SITE_ORIGIN}/risk`, lastmod: today, priority: '0.6' });
 
-  // Article routes
   for (const slug of getArticleSlugs()) {
     urls.push({ loc: `${SITE_ORIGIN}/articles/${slug}`, lastmod: today, priority: '0.7' });
   }
 
-  // Concept routes
   for (const id of getConceptIds()) {
     urls.push({ loc: `${SITE_ORIGIN}/concepts/${id}`, lastmod: today, priority: '0.7' });
   }
 
-  // Published Signal Desk entries from DB
-  const entries = await getPublishedEntries(env);
-  for (const entry of entries) {
-    const lastmod = toW3CDate(entry.source_date) || toW3CDate(entry.created_at) || today;
-    urls.push({ loc: `${SITE_ORIGIN}/signal-desk/${entry.slug}`, lastmod, priority: '0.6' });
+  if (url && anonKey) {
+    const entries = await getPublishedEntries(url, anonKey);
+    for (const entry of entries) {
+      const lastmod = toW3CDate(entry.source_date) || toW3CDate(entry.created_at) || today;
+      urls.push({ loc: `${SITE_ORIGIN}/signal-desk/${entry.slug}`, lastmod, priority: '0.6' });
+    }
   }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>

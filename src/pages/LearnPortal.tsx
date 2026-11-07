@@ -2919,7 +2919,6 @@ export default function LearnPortal() {
               selectedLearner={selectedLearner}
               learnerProgress={learnerProgress}
               track={track}
-              learnerJournalEntries={learnerJournalEntries}
               adminId={userId}
               onInviteLearner={() => setShowInviteModal(true)}
               onApproveTask={handleApproveTask}

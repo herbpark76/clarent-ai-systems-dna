@@ -45,6 +45,7 @@ interface ProcessedEntry {
   result?: string | null;
   duplicate_of_id?: string | null;
   duplicate_of_title?: string | null;
+  concepts?: string[] | null;
 }
 
 // ── Type / layer constants ─────────────────────────────
@@ -64,6 +65,56 @@ function normalizeType(rawType: string): string | null {
   if (VALID_TYPES.has(t)) return t;
   if (TYPE_ALIASES[t]) return TYPE_ALIASES[t];
   return null;
+}
+
+// ── Concept detection (deterministic, no AI) ─────────
+const CONCEPT_KEYWORDS: Array<{ id: string; patterns: RegExp }> = [
+  { id: 'llms', patterns: /\b(llm|gpt|claude|gemini|llama|foundation model|language model)\b/i },
+  { id: 'rag', patterns: /\b(rag|retriev|grounding|hallucinat)\b/i },
+  { id: 'agents', patterns: /\b(agent|autonomous|agentic|workflow)\b/i },
+  { id: 'tool-calling', patterns: /\b(tool call|function call|tool use)\b/i },
+  { id: 'mcp', patterns: /\b(mcp|model context protocol)\b/i },
+  { id: 'embeddings', patterns: /\b(embedding|vector represent)\b/i },
+  { id: 'vector-databases', patterns: /\b(vector db|vector database|pinecone|weaviate|qdrant|pgvector)\b/i },
+  { id: 'chunking', patterns: /\b(chunk|split.*document)\b/i },
+  { id: 'knowledge-graphs', patterns: /\b(knowledge graph|graphrag|neo4j|ontology)\b/i },
+  { id: 'context-windows', patterns: /\b(context window|context length|long context)\b/i },
+  { id: 'tokens', patterns: /\b(token|tokenizer|bpe)\b/i },
+  { id: 'prompt-engineering', patterns: /\b(prompt engineer|prompting|chain.of.thought|few.shot)\b/i },
+  { id: 'evaluation', patterns: /\b(eval|evaluation|benchmark|leaderboard|ragas|trulens)\b/i },
+  { id: 'guardrails', patterns: /\b(guardrail|safety|content filter|constitutional ai)\b/i },
+  { id: 'memory', patterns: /\b(memory|memgpt|letta|zep)\b/i },
+  { id: 'planning', patterns: /\b(planning|plan.*execution|react)\b/i },
+  { id: 'multi-agent-systems', patterns: /\b(multi.agent|multiagent|crewai|autogen)\b/i },
+  { id: 'orchestration', patterns: /\b(orchestrat|pipeline|langgraph|temporal)\b/i },
+  { id: 'monitoring', patterns: /\b(monitor|observ|langsmith|helicone|telemetry)\b/i },
+  { id: 'security', patterns: /\b(security|prompt injection|data leak|adversar|owasp)\b/i },
+  { id: 'deployment', patterns: /\b(deploy|inference|serving|kubernetes|docker)\b/i },
+  { id: 'apis', patterns: /\b(api|rest|graphql|endpoint)\b/i },
+  { id: 'search', patterns: /\b(search|bm25|hybrid search|rerank)\b/i },
+];
+
+const LAYER_TO_CONCEPT: Record<string, string> = {
+  model: 'llms',
+  data_context: 'rag',
+  agent: 'agents',
+  tools_connectors: 'tool-calling',
+  evals: 'evaluation',
+  security_governance: 'security',
+  interface: 'apis',
+};
+
+function detectConcepts(entry: ProcessedEntry): string[] {
+  const ids = new Set<string>();
+  if (entry.system_layer && LAYER_TO_CONCEPT[entry.system_layer]) {
+    ids.add(LAYER_TO_CONCEPT[entry.system_layer]);
+  }
+  const haystack = `${entry.title || ''} ${entry.summary || ''} ${(entry.tags || []).join(' ')}`;
+  for (const { id, patterns } of CONCEPT_KEYWORDS) {
+    if (ids.size >= 3) break;
+    if (patterns.test(haystack)) ids.add(id);
+  }
+  return Array.from(ids).slice(0, 3);
 }
 
 // ── Title cleaning ─────────────────────────────────────
@@ -941,6 +992,7 @@ You MUST call the report_result tool with your finding.`;
           sources: [notesSource], duplicate_of: null, duplicate_status: "none",
           slug: finalSlug, origin: "original", status: "draft",
           review_status: review.status, review_notes: review.notes.join("; ") || null,
+          concepts: detectConcepts(cleanEntry),
         })
         .select("id, title, type, system_layer, status, review_status, review_notes");
 
@@ -1080,6 +1132,7 @@ You MUST call the report_result tool with your finding.`;
         slug: finalSlug, status: "draft",
         review_status: review.status,
         review_notes: review.notes.join("; ") || null,
+        concepts: detectConcepts(e),
       };
     });
 

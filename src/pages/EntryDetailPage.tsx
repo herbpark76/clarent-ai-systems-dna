@@ -7,8 +7,13 @@ import {
   getSources, getSourceDate, TypeBadge, LayerBadge, FromTheFieldBadge,
   type SignalEntry, PageErrorBoundary,
 } from '../lib/signalDesk';
+import { CONCEPTS } from '../data/concepts';
 import { supabase } from '../lib/supabase';
 import { setPageMeta } from '../lib/seo';
+
+const CONCEPT_LABELS: Record<string, string> = Object.fromEntries(
+  CONCEPTS.map((c) => [c.id, c.label])
+);
 
 function EntryLink({ entry }: { entry: SignalEntry }) {
   return (
@@ -191,6 +196,21 @@ function EntryDetailInner() {
           <LayerBadge layer={entry.system_layer} />
           {date && <span className="text-[10px] text-white/25">{date}</span>}
         </div>
+
+        {/* Concept chips */}
+        {entry.concepts && entry.concepts.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {entry.concepts.map((cid) => (
+              <Link
+                key={cid}
+                to={`/concepts/${cid}`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-cyan-500/20 bg-cyan-500/[0.08] text-cyan-300 hover:bg-cyan-500/[0.15] hover:border-cyan-500/35 transition-all"
+              >
+                {CONCEPT_LABELS[cid] || cid}
+              </Link>
+            ))}
+          </div>
+        )}
 
         <h1 className="text-2xl font-bold text-white mb-4 leading-tight">{entry.title}</h1>
 

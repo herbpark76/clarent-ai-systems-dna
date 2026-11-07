@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  ArrowLeft, Clock, AlertTriangle, Lightbulb, ArrowRight, ArrowUpRight, BookOpen,
+  ArrowLeft, Clock, AlertTriangle, ArrowRight, ArrowUpRight, BookOpen, Newspaper,
 } from 'lucide-react';
 import { loadContent, type ContentData } from '../lib/contentService';
 import { CONCEPTS, EDGES, CLUSTER_META } from '../data/concepts';
@@ -10,6 +10,8 @@ import { ROADMAPS } from '../data/roadmaps';
 import type { ProgressStatus, NextStep } from '../data/roadmaps';
 import NavBar from './NavBar';
 import { setPageMeta } from '../lib/seo';
+import { getAllArticleMetas, getQuizSlugs, type ArticleMeta } from '../lib/articles';
+import { fetchLatestByConcept, getSourceDate, TYPE_LABELS, type SignalEntry } from '../lib/signalDesk';
 
 const STORAGE_KEY = 'ai-systems-dna-progress';
 
@@ -45,18 +47,39 @@ const fallbackContent: ContentData = {
   conceptsMap: Object.fromEntries(CONCEPTS.map((c) => [c.id, c])),
 };
 
+function computeReadTime(concept: typeof CONCEPTS[0]): number {
+  const text = [concept.description, concept.whyItMatters, concept.whyShouldICare, concept.commonMistakes.join(' ')].join(' ');
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+
 export default function ConceptPage() {
   const { slug } = useParams<{ slug: string }>();
   const [content, setContent] = useState<ContentData>(fallbackContent);
   const [progress, setProgress] = useState<Record<string, ProgressStatus>>(loadProgress);
+  const [articleMetas, setArticleMetas] = useState<ArticleMeta[]>([]);
+  const [quizSlugs, setQuizSlugs] = useState<Set<string>>(new Set());
+  const [signalEntries, setSignalEntries] = useState<SignalEntry[]>([]);
 
   useEffect(() => {
     loadContent().then(setContent);
+    getAllArticleMetas().then(setArticleMetas);
+    setQuizSlugs(getQuizSlugs());
   }, []);
 
   useEffect(() => { saveProgress(progress); }, [progress]);
 
   const concept = slug ? (content.conceptsMap[slug] ?? null) : null;
+  const readTime = concept ? computeReadTime(concept) : 1;
+
+  // Load Signal Desk entries for this concept
+  useEffect(() => {
+    if (!slug) return;
+    fetchLatestByConcept(slug, 3)
+      .then(setSignalEntries)
+      .catch(() => setSignalEntries([]));
+  }, [slug]);
 
   useEffect(() => {
     if (concept) {
@@ -132,12 +155,10 @@ export default function ConceptPage() {
               {meta.label}
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold text-white leading-tight mb-2">{concept.label}</h1>
-            {concept.estimatedMinutes && (
-              <div className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-white/25" />
-                <span className="text-xs text-white/30">~{concept.estimatedMinutes} min read</span>
-              </div>
-            )}
+            <div className="flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-white/25" />
+              <span className="text-xs text-white/30">~{readTime} min read</span>
+            </div>
           </div>
 
           {/* Progress tracker */}
@@ -168,7 +189,7 @@ export default function ConceptPage() {
             <p className="text-base text-white/65 leading-relaxed">{concept.description}</p>
           </div>
 
-          {/* Why It Matters */}
+          {/* Why It Matters (merged) */}
           <div
             className="p-4 rounded-xl mb-5"
             style={{ background: `${meta.glow}10`, border: `1px solid ${meta.glow}25` }}
@@ -177,17 +198,7 @@ export default function ConceptPage() {
               Why It Matters
             </div>
             <p className="text-sm text-white/60 leading-relaxed">{concept.whyItMatters}</p>
-          </div>
-
-          {/* Why Should I Care */}
-          <div className="p-4 rounded-xl border border-white/[0.07] bg-white/[0.03] mb-5">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Lightbulb className="w-3.5 h-3.5 text-yellow-400" />
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-yellow-400/80">
-                Why Should I Care?
-              </div>
-            </div>
-            <p className="text-sm text-white/60 leading-relaxed">{concept.whyShouldICare}</p>
+            <p className="text-sm text-white/55 leading-relaxed mt-2">{concept.whyShouldICare}</p>
           </div>
 
           {/* Common Mistakes */}
@@ -292,6 +303,71 @@ export default function ConceptPage() {
               ))}
             </div>
           </div>
+
+          {/* Go deeper: related articles */}
+          {(() => {
+            const relatedArticles = articleMetas.filter((m) =>
+              m.concepts && m.concepts.includes(concept.id)
+            );
+            if (relatedArticles.length === 0) return null;
+            return (
+              <div className="mb-6 p-4 rounded-xl border border-white/[0.08] bg-white/[0.03]">
+                <div className="flex items-center gap-1.5 mb-3">
+                  <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+                  <div className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                    Go Deeper
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {relatedArticles.map((article) => (
+                    <Link
+                      key={article.slug}
+                      to={`/articles/${article.slug}`}
+                      className="flex items-center justify-between gap-2 group"
+                    >
+                      <span className="text-sm text-white/65 group-hover:text-white transition-colors">{article.title}</span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {quizSlugs.has(article.slug) && (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Quiz</span>
+                        )}
+                        <ArrowUpRight className="w-3 h-3 text-white/30 group-hover:text-white/60 transition-colors" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Latest from Signal Desk */}
+          {signalEntries.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-1.5 mb-3">
+                <Newspaper className="w-3.5 h-3.5 text-cyan-400" />
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                  Latest from Signal Desk
+                </div>
+              </div>
+              <div className="space-y-2">
+                {signalEntries.map((entry) => {
+                  const date = getSourceDate(entry);
+                  return (
+                    <Link
+                      key={entry.id}
+                      to={`/signal-desk/${entry.slug}`}
+                      className="block p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.12] transition-all group"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-white/[0.06] text-white/50">{TYPE_LABELS[entry.type]}</span>
+                        {date && <span className="text-[10px] text-white/25">{date}</span>}
+                      </div>
+                      <span className="text-sm font-medium text-white/70 group-hover:text-white transition-colors leading-snug line-clamp-2">{entry.title}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Footer back link */}
           <div className="mt-12 pt-8 border-t border-white/[0.05]">

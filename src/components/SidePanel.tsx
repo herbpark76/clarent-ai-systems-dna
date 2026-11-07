@@ -1,8 +1,14 @@
-import { X, ChevronRight, ArrowRight, AlertTriangle, Lightbulb, ArrowUpRight, Clock, ExternalLink } from 'lucide-react';
+import { X, ChevronRight, ArrowRight, AlertTriangle, ArrowUpRight, Clock, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CLUSTER_META } from '../data/concepts';
 import type { Concept } from '../data/concepts';
 import type { ProgressStatus, NextStep } from '../data/roadmaps';
+
+function computeReadTime(concept: Concept): number {
+  const text = [concept.description, concept.whyItMatters, concept.whyShouldICare, concept.commonMistakes.join(' ')].join(' ');
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
 
 interface Props {
   conceptsMap: Record<string, Concept>;
@@ -69,12 +75,10 @@ export default function SidePanel({ conceptsMap, selectedId, onClose, onNavigate
                   {CLUSTER_META[concept.cluster].label}
                 </div>
                 <h2 className="text-xl font-bold text-white leading-tight">{concept.label}</h2>
-                {concept.estimatedMinutes && (
-                  <div className="flex items-center gap-1 mt-1.5">
-                    <Clock className="w-3 h-3 text-white/25" />
-                    <span className="text-[10px] text-white/30">~{concept.estimatedMinutes} min read</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-1 mt-1.5">
+                  <Clock className="w-3 h-3 text-white/25" />
+                  <span className="text-[10px] text-white/30">~{computeReadTime(concept)} min read</span>
+                </div>
               </div>
               <button
                 onClick={onClose}
@@ -126,7 +130,7 @@ export default function SidePanel({ conceptsMap, selectedId, onClose, onNavigate
               <p className="text-sm text-white/65 leading-relaxed">{concept.description}</p>
             </div>
 
-            {/* Why It Matters */}
+            {/* Why It Matters (merged) */}
             <div
               className="p-3.5 rounded-xl"
               style={{ background: `${meta.glow}10`, border: `1px solid ${meta.glow}25` }}
@@ -135,17 +139,7 @@ export default function SidePanel({ conceptsMap, selectedId, onClose, onNavigate
                 Why It Matters
               </div>
               <p className="text-sm text-white/60 leading-relaxed">{concept.whyItMatters}</p>
-            </div>
-
-            {/* Why Should I Care */}
-            <div className="p-3.5 rounded-xl border border-white/[0.07] bg-white/[0.03]">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Lightbulb className="w-3 h-3 text-yellow-400" />
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-yellow-400/80">
-                  Why Should I Care?
-                </div>
-              </div>
-              <p className="text-sm text-white/60 leading-relaxed">{concept.whyShouldICare}</p>
+              <p className="text-sm text-white/55 leading-relaxed mt-2">{concept.whyShouldICare}</p>
             </div>
 
             {/* Common Mistakes */}

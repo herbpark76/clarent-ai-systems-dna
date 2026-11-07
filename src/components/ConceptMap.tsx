@@ -60,6 +60,7 @@ function buildEdgePath(x1: number, y1: number, x2: number, y2: number): string {
 export default function ConceptMap({ concepts, edges, selectedId, onSelect, roadmapConceptIds, progress, currentLessonId }: Props) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [vt, setVt] = useState({ x: 0, y: 0, k: 1 });
+  const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const isPanning = useRef(false);
@@ -438,7 +439,7 @@ export default function ConceptMap({ concepts, edges, selectedId, onSelect, road
       {/* Hint */}
       {!selectedId && !inRoadmapMode && !currentLessonId && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-xs text-white/35 pointer-events-none">
-          Click any node to explore · Scroll to zoom · Drag to pan
+          {isTouch ? 'Tap any node to explore · Pinch to zoom · Drag to pan' : 'Click any node to explore · Scroll to zoom · Drag to pan'}
         </div>
       )}
       {!selectedId && inRoadmapMode && !currentLessonId && (

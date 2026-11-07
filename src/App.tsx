@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import HomePage from './pages/HomePage';
 import ArticlePage from './components/ArticlePage';
 import ConceptPage from './components/ConceptPage';
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/learn" element={<ErrorBoundary><LearnPortal /></ErrorBoundary>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      <Analytics />
     </BrowserRouter>
   );
 }

@@ -47,7 +47,10 @@ export interface SignalEntry {
   result: string | null;
   review_status: string;
   review_notes: string | null;
+  concepts?: string[] | null;
 }
+
+export type SignalEntryDraft = Omit<SignalEntry, 'concepts'> & { concepts?: string[] | null };
 
 export const TYPE_LABELS: Record<EntryType, string> = {
   news: 'News', tutorial: 'Tutorial', use_case: 'Use Case',
@@ -174,6 +177,19 @@ export async function fetchLatestPublished(limit: number = 6): Promise<SignalEnt
     .select('*')
     .eq('status', 'published')
     .in('duplicate_status', VISIBLE_STATUSES)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as SignalEntry[];
+}
+
+export async function fetchLatestByConcept(conceptId: string, limit: number = 3): Promise<SignalEntry[]> {
+  const { data, error } = await supabase
+    .from('signal_desk_entries')
+    .select('*')
+    .eq('status', 'published')
+    .in('duplicate_status', VISIBLE_STATUSES)
+    .filter('concepts', 'cs', `{${conceptId}}`)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;

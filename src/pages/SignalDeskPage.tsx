@@ -1,13 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Newspaper, ChevronRight, Layers, Loader2, ArrowLeft } from 'lucide-react';
+import { Newspaper, ChevronRight, Layers, Loader2, ArrowLeft, Search, X } from 'lucide-react';
 import NavBar from '../components/NavBar';
 import {
   fetchPublishedEntries, getSourceDate, TypeBadge, LayerBadge, SourcesList,
   FromTheFieldBadge,
   LAYER_LABELS, LAYER_COLORS, type SignalEntry, type SystemLayer, PageErrorBoundary,
 } from '../lib/signalDesk';
+import { CONCEPTS } from '../data/concepts';
 import { setPageMeta } from '../lib/seo';
+
+const CONCEPT_LABELS: Record<string, string> = Object.fromEntries(
+  CONCEPTS.map((c) => [c.id, c.label])
+);
 
 const LAYER_ORDER: SystemLayer[] = [
   'model', 'agent', 'tools_connectors', 'data_context', 'evals', 'security_governance', 'interface',
@@ -94,6 +99,8 @@ function SignalDeskInner() {
   const [filter, setFilter] = useState<SystemLayer | null | 'all'>('all');
   const [fromFieldOnly, setFromFieldOnly] = useState(false);
   const [error, setError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [conceptFilter, setConceptFilter] = useState<string | null>(null);
 
   useEffect(() => {
     setPageMeta({
@@ -109,7 +116,22 @@ function SignalDeskInner() {
       .catch(() => { setError(true); setLoading(false); });
   }, []);
 
-  const visibleEntries = fromFieldOnly ? entries.filter((e) => e.origin === 'original') : entries;
+  const visibleEntries = useMemo(() => {
+    let result = fromFieldOnly ? entries.filter((e) => e.origin === 'original') : entries;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter((e) => {
+        const tags = (e.tags || []).join(' ').toLowerCase();
+        return e.title.toLowerCase().includes(q) ||
+          (e.summary || '').toLowerCase().includes(q) ||
+          tags.includes(q);
+      });
+    }
+    if (conceptFilter) {
+      result = result.filter((e) => e.concepts && e.concepts.includes(conceptFilter));
+    }
+    return result;
+  }, [entries, fromFieldOnly, searchQuery, conceptFilter]);
 
   const layerGroups = LAYER_ORDER.map((layer) => ({
     layer,
@@ -120,11 +142,13 @@ function SignalDeskInner() {
 
   const industryEntries = visibleEntries.filter((e) => !e.system_layer);
 
-  const filtered = (fromFieldOnly ? entries.filter((e) => e.origin === 'original') : entries).filter((e) => {
+  const filtered = visibleEntries.filter((e) => {
     if (filter === 'all') return true;
     if (filter === null) return !e.system_layer;
     return e.system_layer === filter;
   });
+
+  const hasActiveSearch = searchQuery.trim() !== '' || conceptFilter !== null;
 
   if (loading) {
     return (
@@ -167,6 +191,46 @@ function SignalDeskInner() {
           Every AI headline is a clue about how these systems are built. Here's the latest news, sorted by the part of the system it touches.
         </p>
 
+        {/* Search + concept filter */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by title, summary, or tag…"
+              className="w-full pl-9 pr-8 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-sm text-white placeholder-white/25 focus:outline-none focus:border-cyan-500/40 transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <select
+            value={conceptFilter || ''}
+            onChange={(e) => setConceptFilter(e.target.value || null)}
+            className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-sm text-white/60 focus:outline-none focus:border-cyan-500/40 transition-all appearance-none cursor-pointer"
+          >
+            <option value="" className="bg-[#0f1523]">All concepts</option>
+            {CONCEPTS.map((c) => (
+              <option key={c.id} value={c.id} className="bg-[#0f1523]">{c.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {hasActiveSearch && (
+          <p className="text-xs text-white/35 mb-4">
+            {filtered.length} {filtered.length === 1 ? 'result' : 'results'}
+            {searchQuery && ` for “${searchQuery}”`}
+            {conceptFilter && ` in ${CONCEPT_LABELS[conceptFilter] || conceptFilter}`}
+          </p>
+        )}
+
         {/* From the field filter */}
         <div className="flex items-center gap-2 mb-6">
           <button
@@ -185,7 +249,22 @@ function SignalDeskInner() {
           )}
         </div>
 
-        {filter !== 'all' ? (
+        {hasActiveSearch ? (
+          <>
+            <button onClick={() => { setSearchQuery(''); setConceptFilter(null); }} className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 mb-4 transition-colors">
+              <ArrowLeft className="w-3 h-3" /> Clear search
+            </button>
+            {filtered.length === 0 ? (
+              <p className="text-sm text-white/30 text-center py-12">No entries match your search.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {filtered.map((entry) => (
+                  <EntryDetailCard key={entry.id} entry={entry} />
+                ))}
+              </div>
+            )}
+          </>
+        ) : filter !== 'all' ? (
           <>
             <button onClick={() => setFilter('all')} className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 mb-4 transition-colors">
               <ArrowLeft className="w-3 h-3" /> All layers

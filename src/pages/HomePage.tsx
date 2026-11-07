@@ -173,7 +173,12 @@ function LatestSignalDeskStrip() {
 }
 
 export default function HomePage() {
-  const [mode, setMode] = useState<AppMode>('explore');
+  const [mode, setMode] = useState<AppMode>(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      return 'roadmap';
+    }
+    return 'explore';
+  });
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activePath, setActivePath] = useState<{ id: string; index: number } | null>(null);
