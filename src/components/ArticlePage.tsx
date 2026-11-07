@@ -9,6 +9,7 @@ import { loadContent, type ContentData } from '../lib/contentService';
 import { CONCEPTS, EDGES, CLUSTER_META, type Concept } from '../data/concepts';
 import { LEARNING_PATH_DEFS } from '../data/learningPaths';
 import { isArticleRead, markArticleRead } from '../lib/progress';
+import { setPageMeta } from '../lib/seo';
 import NavBar from './NavBar';
 import Quiz from './Quiz';
 
@@ -47,11 +48,16 @@ export default function ArticlePage() {
 
   useEffect(() => {
     if (article?.meta?.title) {
-      document.title = `${article.meta.title} | AI Systems DNA`;
+      setPageMeta({
+        title: `${article.meta.title} | AI Systems DNA`,
+        description: article.meta.description,
+        path: `/articles/${slug}`,
+        type: 'article',
+      });
     } else if (article === null) {
-      document.title = 'Article Not Found | AI Systems DNA';
+      setPageMeta({ title: 'Article Not Found | AI Systems DNA', path: `/articles/${slug}`, noindex: true });
     }
-  }, [article]);
+  }, [article, slug]);
 
   const handleMarkRead = () => {
     if (!slug) return;

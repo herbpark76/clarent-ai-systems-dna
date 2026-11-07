@@ -20,6 +20,7 @@ import { ROADMAPS, type ProgressStatus, type NextStep } from '../data/roadmaps';
 import { LEARNING_PATH_DEFS } from '../data/learningPaths';
 import { getAllArticleMetas, type ArticleMeta } from '../lib/articles';
 import { fetchLatestPublished, getSourceDate, TYPE_LABELS, TYPE_COLORS, FromTheFieldBadge, type SignalEntry as SignalEntryType } from '../lib/signalDesk';
+import { setPageMeta } from '../lib/seo';
 
 type AppMode = 'explore' | 'roadmap';
 
@@ -192,7 +193,7 @@ export default function HomePage() {
   });
 
   useEffect(() => {
-    document.title = 'AI Systems DNA — Learn How Modern AI Systems Are Built | Clarent';
+    setPageMeta({ path: '/' });
   }, []);
 
   useEffect(() => {

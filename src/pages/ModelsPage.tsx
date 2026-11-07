@@ -6,6 +6,7 @@ import {
   fetchPublishedByType, dedupeByModelName, getSourceDate,
   type SignalEntry, PageErrorBoundary,
 } from '../lib/signalDesk';
+import { setPageMeta } from '../lib/seo';
 
 type SortKey = 'model_name' | 'vendor' | 'benchmark_score' | 'price_input' | 'price_output' | 'date';
 
@@ -177,7 +178,7 @@ function ModelsInner() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
-    document.title = 'Model Tracker — AI Systems DNA';
+    setPageMeta({ title: 'Model Tracker — AI Systems DNA', path: '/models' });
   }, []);
 
   useEffect(() => {

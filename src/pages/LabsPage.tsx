@@ -8,6 +8,7 @@ import {
   type SignalEntry, PageErrorBoundary,
 } from '../lib/signalDesk';
 import { supabase } from '../lib/supabase';
+import { setPageMeta } from '../lib/seo';
 
 const STORAGE_KEY = 'ai-systems-dna-labs-progress';
 
@@ -143,7 +144,7 @@ function LabsInner() {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = 'Labs — AI Systems DNA';
+    setPageMeta({ title: 'Labs — AI Systems DNA', path: '/labs' });
   }, []);
 
   useEffect(() => {

@@ -11,6 +11,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { reviewDraft, reReviewAfterApply, type ReviewProposal, type ReviewSummary } from '../lib/qualityReview';
 import NavBar from '../components/NavBar';
+import { setPageMeta } from '../lib/seo';
 
 // ── Types ──────────────────────────────────────────────
 type EntryType = 'news' | 'tutorial' | 'use_case' | 'tool' | 'model_release' | 'risk';
@@ -969,6 +970,10 @@ export default function AdminSignalDesk() {
   const [repairLoading, setRepairLoading] = useState(false);
   const [repairProposals, setRepairProposals] = useState<RepairProposal[] | null>(null);
   const [repairMsg, setRepairMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  useEffect(() => {
+    setPageMeta({ title: 'Signal Desk Admin', path: '/admin/signal-desk', noindex: true });
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {

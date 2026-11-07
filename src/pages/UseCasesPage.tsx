@@ -7,6 +7,7 @@ import {
   TypeBadge, LayerBadge, SourcesList, FromTheFieldBadge, LAYER_LABELS,
   type SignalEntry, type SystemLayer, PageErrorBoundary,
 } from '../lib/signalDesk';
+import { setPageMeta } from '../lib/seo';
 
 const ALL_LAYERS: (SystemLayer | 'all')[] = ['all', 'model', 'agent', 'tools_connectors', 'data_context', 'evals', 'security_governance', 'interface'];
 
@@ -83,7 +84,7 @@ function UseCasesInner() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    document.title = 'Use-Case Library — AI Systems DNA';
+    setPageMeta({ title: 'Use-Case Library — AI Systems DNA', path: '/use-cases' });
   }, []);
 
   useEffect(() => {

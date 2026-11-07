@@ -7,6 +7,7 @@ import {
   FromTheFieldBadge,
   type SignalEntry, PageErrorBoundary,
 } from '../lib/signalDesk';
+import { setPageMeta } from '../lib/seo';
 
 const PINNED_QUESTIONS = [
   'What identity does the agent use and is it logged?',
@@ -68,7 +69,7 @@ function RiskInner() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    document.title = 'AI Risk & Governance — AI Systems DNA';
+    setPageMeta({ title: 'AI Risk & Governance — AI Systems DNA', path: '/risk' });
   }, []);
 
   useEffect(() => {

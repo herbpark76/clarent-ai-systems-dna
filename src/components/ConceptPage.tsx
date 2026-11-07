@@ -9,6 +9,7 @@ import { LEARNING_PATH_DEFS } from '../data/learningPaths';
 import { ROADMAPS } from '../data/roadmaps';
 import type { ProgressStatus, NextStep } from '../data/roadmaps';
 import NavBar from './NavBar';
+import { setPageMeta } from '../lib/seo';
 
 const STORAGE_KEY = 'ai-systems-dna-progress';
 
@@ -59,9 +60,13 @@ export default function ConceptPage() {
 
   useEffect(() => {
     if (concept) {
-      document.title = `${concept.label} | AI Systems DNA`;
+      setPageMeta({
+        title: `${concept.label} | AI Systems DNA`,
+        description: concept.description,
+        path: `/concepts/${concept.id}`,
+      });
     } else if (slug && !concept) {
-      document.title = 'Concept Not Found | AI Systems DNA';
+      setPageMeta({ title: 'Concept Not Found | AI Systems DNA', path: `/concepts/${slug}`, noindex: true });
     }
   }, [concept, slug]);
 

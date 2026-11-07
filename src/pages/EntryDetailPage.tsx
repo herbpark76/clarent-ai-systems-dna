@@ -8,6 +8,7 @@ import {
   type SignalEntry, PageErrorBoundary,
 } from '../lib/signalDesk';
 import { supabase } from '../lib/supabase';
+import { setPageMeta } from '../lib/seo';
 
 function EntryLink({ entry }: { entry: SignalEntry }) {
   return (
@@ -88,22 +89,13 @@ function EntryDetailInner() {
   // Set page title and meta tags
   useEffect(() => {
     if (entry) {
-      document.title = `${entry.title} — AI Systems DNA`;
-      setMetaTag('description', entry.summary);
-      setMetaProperty('og:title', `${entry.title} — AI Systems DNA`);
-      setMetaProperty('og:description', entry.summary);
-      setMetaProperty('og:url', `${window.location.origin}/signal-desk/${entry.slug}`);
-      setMetaProperty('og:type', 'article');
-      setMetaProperty('twitter:card', 'summary_large_image');
-      setMetaProperty('twitter:title', `${entry.title} — AI Systems DNA`);
-      setMetaProperty('twitter:description', entry.summary);
+      setPageMeta({
+        title: `${entry.title} — AI Systems DNA`,
+        description: entry.summary,
+        path: `/signal-desk/${entry.slug}`,
+        type: 'article',
+      });
     }
-    return () => {
-      // Clean up meta tags when leaving
-      document.title = 'AI Systems DNA';
-      removeMetaTag('description');
-      ['og:title', 'og:description', 'og:url', 'og:type', 'twitter:card', 'twitter:title', 'twitter:description'].forEach(removeMetaProperty);
-    };
   }, [entry]);
 
   const handleCopyLink = useCallback(() => {
@@ -361,35 +353,6 @@ function EntryDetailInner() {
       </div>
     </div>
   );
-}
-
-// ── Meta tag helpers ───────────────────────────────────
-function setMetaTag(name: string, content: string) {
-  let el = document.querySelector(`meta[name="${name}"]`);
-  if (!el) {
-    el = document.createElement('meta');
-    el.setAttribute('name', name);
-    document.head.appendChild(el);
-  }
-  el.setAttribute('content', content);
-}
-
-function setMetaProperty(property: string, content: string) {
-  let el = document.querySelector(`meta[property="${property}"]`);
-  if (!el) {
-    el = document.createElement('meta');
-    el.setAttribute('property', property);
-    document.head.appendChild(el);
-  }
-  el.setAttribute('content', content);
-}
-
-function removeMetaTag(name: string) {
-  document.querySelector(`meta[name="${name}"]`)?.remove();
-}
-
-function removeMetaProperty(property: string) {
-  document.querySelector(`meta[property="${property}"]`)?.remove();
 }
 
 // ── Per-step copy state (must be a component, not inline in map) ──

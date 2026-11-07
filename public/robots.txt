@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /learn
+
+Sitemap: https://aisystems.clarenttech.com/sitemap.xml

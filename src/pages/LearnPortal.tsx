@@ -33,6 +33,7 @@ import {
   CelebrationOverlay, SessionPrepModal, AdminUnlockButton, fetchManualUnlocks,
   type WeekUnlockInfo,
 } from '../components/weekProgress';
+import { setPageMeta } from '../lib/seo';
 
 // ── Types ──────────────────────────────────────────────
 type TaskStatus = 'not_started' | 'in_progress' | 'submitted' | 'approved' | 'changes_requested';
@@ -2297,6 +2298,10 @@ export default function LearnPortal() {
   const [authView, setAuthView] = useState<'signin' | 'forgot'>('signin');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+
+  useEffect(() => {
+    setPageMeta({ title: 'Learn Portal', path: '/learn', noindex: true });
+  }, []);
 
   // Detect recovery/invite flows from URL on initial load
   useEffect(() => {

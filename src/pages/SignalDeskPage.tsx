@@ -7,6 +7,7 @@ import {
   FromTheFieldBadge,
   LAYER_LABELS, LAYER_COLORS, type SignalEntry, type SystemLayer, PageErrorBoundary,
 } from '../lib/signalDesk';
+import { setPageMeta } from '../lib/seo';
 
 const LAYER_ORDER: SystemLayer[] = [
   'model', 'agent', 'tools_connectors', 'data_context', 'evals', 'security_governance', 'interface',
@@ -95,7 +96,11 @@ function SignalDeskInner() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    document.title = 'Signal Desk — AI Systems DNA';
+    setPageMeta({
+      title: 'Signal Desk — AI Systems DNA',
+      description: 'AI news, sorted by system layer — every AI headline is a clue about how these systems are built.',
+      path: '/signal-desk',
+    });
   }, []);
 
   useEffect(() => {
