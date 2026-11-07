@@ -9,3 +9,9 @@ verify_jwt = true
 
 [functions.notify-task-submission]
 verify_jwt = true
+
+[functions.contact-email]
+verify_jwt = false
+
+[functions.weekly-digest]
+verify_jwt = true

@@ -16,6 +16,14 @@
     "process-newsletter": {
       "hasChanged": false,
       "hash": "d261353180a2d966e53ea3c5d849e1fd9fce2993bbc68c7564f4bd0fd0595086"
+    },
+    "contact-email": {
+      "hasChanged": false,
+      "hash": "8de01fb76b88df75cbabc506478c1da9f90f722cfcbc15256b951f461dbb0937"
+    },
+    "weekly-digest": {
+      "hasChanged": false,
+      "hash": "b195a9bf4d247d6052c3f12ebc6ded4617726d1051f032e447099e1c8abdf85a"
     }
   }
 }

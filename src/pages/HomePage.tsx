@@ -705,7 +705,7 @@ export default function HomePage() {
               <button type="submit" disabled={formState === 'loading'} className="w-full py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-sm hover:from-blue-400 hover:to-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/20">
                 {formState === 'loading' ? 'Submitting...' : 'Get Updates'}
               </button>
-              <p className="text-center text-xs text-white/20">No spam. Unsubscribe any time.</p>
+              <p className="text-center text-xs text-white/20">No spam. Unsubscribe any time. See our <Link to="/privacy" className="text-cyan-400/60 hover:text-cyan-300 transition-colors">Privacy Policy</Link>.</p>
             </form>
           )}
         </div>
@@ -740,28 +740,37 @@ export default function HomePage() {
             <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
               <Compass className="w-3 h-3 text-white" />
             </div>
-            <span className="text-xs text-white/35">AI Systems DNA · A Clarent · AI DNA Framework product</span>
+            <a href="https://clarenttech.com" target="_blank" rel="noopener noreferrer" className="text-xs text-white/35 hover:text-white/60 transition-colors">
+              AI Systems DNA · A Clarent Technologies product
+            </a>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap justify-center">
             {[
               { label: 'System Map', href: '/#system-map' },
               { label: 'Learning Paths', href: '/#learning-paths' },
               { label: 'Deep Dives', href: '/#deep-dives' },
               { label: 'AI DNA', href: '/#ai-dna' },
-              { label: 'Contact', href: '/#waitlist' },
+              { label: 'Contact', href: '/contact' },
+              { label: 'Privacy', href: '/privacy' },
             ].map((l) => (
-              <button
+              <Link
                 key={l.label}
-                onClick={() => {
-                  const hash = l.href.slice(1);
-                  if (window.location.pathname === '/') {
-                    document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' });
+                to={l.href}
+                onClick={(e) => {
+                  if (l.href.startsWith('/#')) {
+                    e.preventDefault();
+                    const hash = l.href.slice(1);
+                    if (window.location.pathname === '/') {
+                      document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                      window.location.href = l.href;
+                    }
                   }
                 }}
                 className="text-xs text-white/25 hover:text-white/60 transition-colors"
               >
                 {l.label}
-              </button>
+              </Link>
             ))}
           </div>
         </div>

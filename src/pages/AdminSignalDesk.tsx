@@ -1896,11 +1896,17 @@ export default function AdminSignalDesk() {
         )}
 
         {/* Back link */}
-        <div className="mt-10 pt-6 border-t border-white/[0.05]">
-          <Link to="/" className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors group">
-            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-            Back to site
-          </Link>
+        <div className="mt-10 pt-6 border-t border-white/[0.05] flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/" className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors group">
+              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+              Back to site
+            </Link>
+            <Link to="/admin/subscribers" className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors group">
+              Subscribers & Contact
+              <ArrowLeft className="w-3.5 h-3.5 rotate-180 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          </div>
         </div>
       </div>
 

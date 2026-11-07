@@ -122,6 +122,8 @@ async function main() {
   urls.push({ loc: `${SITE_ORIGIN}/use-cases`, lastmod: today, priority: '0.6' });
   urls.push({ loc: `${SITE_ORIGIN}/models`, lastmod: today, priority: '0.6' });
   urls.push({ loc: `${SITE_ORIGIN}/risk`, lastmod: today, priority: '0.6' });
+  urls.push({ loc: `${SITE_ORIGIN}/contact`, lastmod: today, priority: '0.6' });
+  urls.push({ loc: `${SITE_ORIGIN}/privacy`, lastmod: today, priority: '0.4' });
 
   for (const slug of getArticleSlugs()) {
     urls.push({ loc: `${SITE_ORIGIN}/articles/${slug}`, lastmod: today, priority: '0.7' });
