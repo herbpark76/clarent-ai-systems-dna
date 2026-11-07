@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Cpu, Loader2, ArrowUpDown, Trophy, DollarSign, TrendingUp } from 'lucide-react';
+import { Cpu, Loader2, ArrowUpDown, Trophy, DollarSign, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import {
@@ -14,6 +14,10 @@ function parsePrice(price: string | null): number | null {
   if (!price) return null;
   const match = price.match(/([0-9]+(?:\.[0-9]+)?)/);
   return match ? parseFloat(match[1]) : null;
+}
+
+function hasRealMetric(entry: SignalEntry): boolean {
+  return entry.benchmark_score != null || parsePrice(entry.price_input) != null || parsePrice(entry.price_output) != null;
 }
 
 function ModelTable({ entries, sortKey, sortDir, onSort }: {
@@ -176,6 +180,7 @@ function ModelsInner() {
   const [error, setError] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [showWithoutData, setShowWithoutData] = useState(false);
 
   useEffect(() => {
     setPageMeta({ title: 'Model Tracker — AI Systems DNA', path: '/models' });
@@ -198,6 +203,10 @@ function ModelsInner() {
       setSortDir('desc');
     }
   };
+
+  const withData = useMemo(() => allEntries.filter(hasRealMetric), [allEntries]);
+  const withoutData = useMemo(() => allEntries.filter((e) => !hasRealMetric(e)), [allEntries]);
+  const displayedEntries = useMemo(() => showWithoutData ? allEntries : withData, [allEntries, withData, showWithoutData]);
 
   if (loading) {
     return (
@@ -231,13 +240,26 @@ function ModelsInner() {
           </div>
         ) : (
           <>
-            <RecommendationCard entries={allEntries} />
+            <RecommendationCard entries={withData} />
+            {withData.length > 0 && (
+              <div className="mb-2 text-xs text-white/35">
+                Showing {withData.length} model{withData.length !== 1 ? 's' : ''} with benchmark or pricing data
+              </div>
+            )}
             <ModelTable
-              entries={allEntries}
+              entries={displayedEntries}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
             />
+            {withoutData.length > 0 && (
+              <button
+                onClick={() => setShowWithoutData(!showWithoutData)}
+                className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.03] text-xs text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"
+              >
+                {showWithoutData ? <><ChevronUp className="w-3.5 h-3.5" /> Hide releases without data</> : <><ChevronDown className="w-3.5 h-3.5" /> Show releases without data ({withoutData.length})</>}
+              </button>
+            )}
           </>
         )}
       </div>

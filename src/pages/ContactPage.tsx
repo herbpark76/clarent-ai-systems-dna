@@ -213,7 +213,7 @@ export default function ContactPage() {
           {/* Clarent link */}
           <div className="mt-12 pt-8 border-t border-white/[0.05]">
             <a
-              href="https://clarenttech.com"
+              href="https://www.clarenttechnologies.com/"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm text-white/40 hover:text-white/70 transition-colors"

@@ -740,7 +740,7 @@ export default function HomePage() {
             <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
               <Compass className="w-3 h-3 text-white" />
             </div>
-            <a href="https://clarenttech.com" target="_blank" rel="noopener noreferrer" className="text-xs text-white/35 hover:text-white/60 transition-colors">
+            <a href="https://www.clarenttechnologies.com/" target="_blank" rel="noopener noreferrer" className="text-xs text-white/35 hover:text-white/60 transition-colors">
               AI Systems DNA · A Clarent Technologies product
             </a>
           </div>

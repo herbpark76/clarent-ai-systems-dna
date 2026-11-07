@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Lightbulb, Search, Loader2, X } from 'lucide-react';
+import { Lightbulb, Search, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import {
@@ -74,6 +74,34 @@ function UseCaseCard({ entry }: { entry: SignalEntry }) {
   );
 }
 
+interface TagInfo {
+  canonical: string;
+  count: number;
+}
+
+function buildNormalizedTagMap(entries: SignalEntry[], field: 'tags' | 'role_tags'): TagInfo[] {
+  const counts = new Map<string, { canonical: string; count: number }>();
+  for (const e of entries) {
+    const raw = normalizeStringArray(e[field]);
+    for (const t of raw) {
+      const key = t.toLowerCase().trim();
+      if (!key) continue;
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        counts.set(key, { canonical: key, count: 1 });
+      }
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.canonical.localeCompare(b.canonical));
+}
+
+function entryMatchesNormalizedTag(entry: SignalEntry, field: 'tags' | 'role_tags', canonicalTag: string): boolean {
+  const raw = normalizeStringArray(entry[field]);
+  return raw.some((t) => t.toLowerCase().trim() === canonicalTag);
+}
+
 function UseCasesInner() {
   const [entries, setEntries] = useState<SignalEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +110,10 @@ function UseCasesInner() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [showAllTags, setShowAllTags] = useState(false);
+  const [showAllRoles, setShowAllRoles] = useState(false);
+  const [tagSearch, setTagSearch] = useState('');
+  const [roleSearch, setRoleSearch] = useState('');
 
   useEffect(() => {
     setPageMeta({ title: 'Use-Case Library — AI Systems DNA', path: '/use-cases' });
@@ -93,23 +125,40 @@ function UseCasesInner() {
       .catch(() => { setError(true); setLoading(false); });
   }, []);
 
-  const allRoleTags = useMemo(() => {
-    const set = new Set<string>();
-    entries.forEach((e) => normalizeStringArray(e.role_tags).forEach((t) => set.add(t)));
-    return [...set].sort();
-  }, [entries]);
+  const allRoleTags = useMemo(() => buildNormalizedTagMap(entries, 'role_tags'), [entries]);
+  const allTags = useMemo(() => buildNormalizedTagMap(entries, 'tags'), [entries]);
 
-  const allTags = useMemo(() => {
-    const set = new Set<string>();
-    entries.forEach((e) => normalizeStringArray(e.tags).forEach((t) => set.add(t)));
-    return [...set].sort();
-  }, [entries]);
+  const TOP_N = 20;
+
+  const visibleTags = useMemo(() => {
+    let list = allTags;
+    if (tagSearch.trim()) {
+      const q = tagSearch.toLowerCase();
+      list = list.filter((t) => t.canonical.includes(q));
+    }
+    if (!showAllTags && !tagSearch.trim()) {
+      return list.slice(0, TOP_N);
+    }
+    return list;
+  }, [allTags, showAllTags, tagSearch]);
+
+  const visibleRoles = useMemo(() => {
+    let list = allRoleTags;
+    if (roleSearch.trim()) {
+      const q = roleSearch.toLowerCase();
+      list = list.filter((t) => t.canonical.includes(q));
+    }
+    if (!showAllRoles && !roleSearch.trim()) {
+      return list.slice(0, TOP_N);
+    }
+    return list;
+  }, [allRoleTags, showAllRoles, roleSearch]);
 
   const filtered = useMemo(() => {
     return entries.filter((e) => {
       if (layerFilter !== 'all' && e.system_layer !== layerFilter) return false;
-      if (roleFilter !== 'all' && !normalizeStringArray(e.role_tags).includes(roleFilter)) return false;
-      if (tagFilter !== 'all' && !normalizeStringArray(e.tags).includes(tagFilter)) return false;
+      if (roleFilter !== 'all' && !entryMatchesNormalizedTag(e, 'role_tags', roleFilter)) return false;
+      if (tagFilter !== 'all' && !entryMatchesNormalizedTag(e, 'tags', tagFilter)) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
         if (!e.title.toLowerCase().includes(q) && !e.summary.toLowerCase().includes(q)) return false;
@@ -162,22 +211,95 @@ function UseCasesInner() {
                   <option key={l} value={l} className="bg-[#0f1523]">{l === 'all' ? 'All layers' : LAYER_LABELS[l]}</option>
                 ))}
               </select>
-              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500/50">
-                <option value="all" className="bg-[#0f1523]">All roles</option>
-                {allRoleTags.map((t) => <option key={t} value={t} className="bg-[#0f1523]">{t}</option>)}
-              </select>
-              <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500/50">
-                <option value="all" className="bg-[#0f1523]">All tags</option>
-                {allTags.map((t) => <option key={t} value={t} className="bg-[#0f1523]">{t}</option>)}
-              </select>
+            </div>
+
+            {/* Tag and role filter panels */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              {/* Tags panel */}
+              <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-white/40 uppercase tracking-wide">Tags</span>
+                  {tagFilter !== 'all' && (
+                    <button onClick={() => setTagFilter('all')} className="text-[10px] text-cyan-400/70 hover:text-cyan-300 transition-colors">Clear</button>
+                  )}
+                </div>
+                <input
+                  value={tagSearch}
+                  onChange={(e) => setTagSearch(e.target.value)}
+                  placeholder="Filter tags..."
+                  className="w-full mb-2 px-2 py-1 rounded bg-white/[0.05] border border-white/10 text-white text-[11px] placeholder-white/20 focus:outline-none focus:border-blue-500/50 transition-all"
+                />
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                  {visibleTags.length === 0 && <span className="text-[10px] text-white/25">No tags found.</span>}
+                  {visibleTags.map((t) => (
+                    <button
+                      key={t.canonical}
+                      onClick={() => setTagFilter(tagFilter === t.canonical ? 'all' : t.canonical)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] transition-all ${
+                        tagFilter === t.canonical
+                          ? 'bg-blue-500/30 text-blue-200 border border-blue-500/40'
+                          : 'bg-white/[0.06] text-white/45 hover:bg-white/[0.12] hover:text-white/70 border border-transparent'
+                      }`}
+                    >
+                      {t.canonical} <span className="text-white/25">{t.count}</span>
+                    </button>
+                  ))}
+                </div>
+                {allTags.length > TOP_N && !tagSearch.trim() && (
+                  <button
+                    onClick={() => setShowAllTags(!showAllTags)}
+                    className="mt-2 inline-flex items-center gap-1 text-[10px] text-white/35 hover:text-white/60 transition-colors"
+                  >
+                    {showAllTags ? <><ChevronUp className="w-3 h-3" /> Show fewer</> : <><ChevronDown className="w-3 h-3" /> Show all {allTags.length} tags</>}
+                  </button>
+                )}
+              </div>
+
+              {/* Roles panel */}
+              <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-white/40 uppercase tracking-wide">Roles</span>
+                  {roleFilter !== 'all' && (
+                    <button onClick={() => setRoleFilter('all')} className="text-[10px] text-cyan-400/70 hover:text-cyan-300 transition-colors">Clear</button>
+                  )}
+                </div>
+                <input
+                  value={roleSearch}
+                  onChange={(e) => setRoleSearch(e.target.value)}
+                  placeholder="Filter roles..."
+                  className="w-full mb-2 px-2 py-1 rounded bg-white/[0.05] border border-white/10 text-white text-[11px] placeholder-white/20 focus:outline-none focus:border-blue-500/50 transition-all"
+                />
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                  {visibleRoles.length === 0 && <span className="text-[10px] text-white/25">No roles found.</span>}
+                  {visibleRoles.map((t) => (
+                    <button
+                      key={t.canonical}
+                      onClick={() => setRoleFilter(roleFilter === t.canonical ? 'all' : t.canonical)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] transition-all ${
+                        roleFilter === t.canonical
+                          ? 'bg-amber-500/30 text-amber-200 border border-amber-500/40'
+                          : 'bg-amber-500/10 text-amber-300/60 hover:bg-amber-500/20 hover:text-amber-300/90 border border-transparent'
+                      }`}
+                    >
+                      {t.canonical} <span className="text-white/25">{t.count}</span>
+                    </button>
+                  ))}
+                </div>
+                {allRoleTags.length > TOP_N && !roleSearch.trim() && (
+                  <button
+                    onClick={() => setShowAllRoles(!showAllRoles)}
+                    className="mt-2 inline-flex items-center gap-1 text-[10px] text-white/35 hover:text-white/60 transition-colors"
+                  >
+                    {showAllRoles ? <><ChevronUp className="w-3 h-3" /> Show fewer</> : <><ChevronDown className="w-3 h-3" /> Show all {allRoleTags.length} roles</>}
+                  </button>
+                )}
+              </div>
             </div>
 
             {(layerFilter !== 'all' || roleFilter !== 'all' || tagFilter !== 'all' || search.trim()) && (
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-xs text-white/40">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
-                <button onClick={() => { setLayerFilter('all'); setRoleFilter('all'); setTagFilter('all'); setSearch(''); }}
+                <button onClick={() => { setLayerFilter('all'); setRoleFilter('all'); setTagFilter('all'); setSearch(''); setTagSearch(''); setRoleSearch(''); }}
                   className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors">
                   <X className="w-3 h-3" /> Clear filters
                 </button>

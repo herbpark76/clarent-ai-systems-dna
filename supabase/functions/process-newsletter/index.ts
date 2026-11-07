@@ -67,6 +67,15 @@ function normalizeType(rawType: string): string | null {
   return null;
 }
 
+// ── Valid concept IDs (from the AI Systems DNA concept map) ──
+const VALID_CONCEPT_IDS = new Set([
+  'llms', 'tokens', 'context-windows', 'embeddings', 'prompt-engineering',
+  'vector-databases', 'knowledge-graphs', 'rag', 'chunking', 'metadata',
+  'search', 'tool-calling', 'mcp', 'agents', 'multi-agent-systems',
+  'memory', 'planning', 'evaluation', 'guardrails', 'apis',
+  'orchestration', 'monitoring', 'security', 'deployment',
+]);
+
 // ── Concept detection (deterministic, no AI) ─────────
 const CONCEPT_KEYWORDS: Array<{ id: string; patterns: RegExp }> = [
   { id: 'llms', patterns: /\b(llm|gpt|claude|gemini|llama|foundation model|language model)\b/i },
@@ -104,17 +113,44 @@ const LAYER_TO_CONCEPT: Record<string, string> = {
   interface: 'apis',
 };
 
-function detectConcepts(entry: ProcessedEntry): string[] {
+function detectConcepts(entry: ProcessedEntry, aiConcepts?: string[] | null): string[] {
   const ids = new Set<string>();
-  if (entry.system_layer && LAYER_TO_CONCEPT[entry.system_layer]) {
-    ids.add(LAYER_TO_CONCEPT[entry.system_layer]);
+
+  // If the AI provided concept IDs, validate them against the fixed list
+  if (aiConcepts && Array.isArray(aiConcepts)) {
+    for (const c of aiConcepts) {
+      const normalized = String(c).toLowerCase().trim();
+      if (VALID_CONCEPT_IDS.has(normalized)) {
+        ids.add(normalized);
+      }
+      if (ids.size >= 3) break;
+    }
   }
-  const haystack = `${entry.title || ''} ${entry.summary || ''} ${(entry.tags || []).join(' ')}`;
-  for (const { id, patterns } of CONCEPT_KEYWORDS) {
-    if (ids.size >= 3) break;
-    if (patterns.test(haystack)) ids.add(id);
+
+  // Fall back to deterministic keyword matching if AI gave nothing valid
+  if (ids.size === 0) {
+    if (entry.system_layer && LAYER_TO_CONCEPT[entry.system_layer]) {
+      ids.add(LAYER_TO_CONCEPT[entry.system_layer]);
+    }
+    const haystack = `${entry.title || ''} ${entry.summary || ''} ${(entry.tags || []).join(' ')}`;
+    for (const { id, patterns } of CONCEPT_KEYWORDS) {
+      if (ids.size >= 3) break;
+      if (patterns.test(haystack)) ids.add(id);
+    }
   }
+
   return Array.from(ids).slice(0, 3);
+}
+
+// ── Risk/Security classification check ─────────────────
+// An entry may only be classified as risk type or security_governance layer
+// if it mentions BOTH an AI term AND a risk/security/policy term.
+const AI_TERMS = /\b(ai|artificial intelligence|machine learning|ml|llm|language model|gpt|claude|gemini|llama|model|agent|chatbot|foundation model|generative ai|genai|neural|transformer|embedding|rag|prompt|inference)\b/i;
+const RISK_TERMS = /\b(risk|security|safety|vulnerab|prompt injection|data leak|breach|privacy|regulat|policy|governance|compliance|ban|restrict|harm|bias|toxic|jailbreak|adversar|attack|exploit|owasp|guardrail|constitutional|red team|alignment|misuse|deepfake|hallucinat|copyright|intellectual property|eu ai act|executive order)\b/i;
+
+function isAIRiskEntry(entry: ProcessedEntry): boolean {
+  const haystack = `${entry.title || ''} ${entry.summary || ''} ${entry.business_angle || ''} ${(entry.tags || []).join(' ')}`;
+  return AI_TERMS.test(haystack) && RISK_TERMS.test(haystack);
 }
 
 // ── Title cleaning ─────────────────────────────────────
@@ -245,6 +281,12 @@ FIELDS:
 
 NEVER invent missing instructions, prompts, outcomes, benchmark scores, or prices. If the notes don't provide them, leave the field empty.
 
+MODEL RELEASES: Only use type "model_release" if the entry reports at least one benchmark score OR pricing (input/output). If a story mentions a model but provides no benchmark or pricing data, classify it as "news" instead.
+
+RISK CLASSIFICATION: Only use type "risk" or system_layer "security_governance" for entries about AI risks, AI security, AI safety, AI policy/regulation, or AI governance. General tech business, geopolitics, or non-AI security stories should be type "news" with system_layer null.
+
+CONCEPT TAGGING: Pick 1-3 concept IDs from this fixed list that best match the entry: llms, tokens, context-windows, embeddings, prompt-engineering, vector-databases, knowledge-graphs, rag, chunking, metadata, search, tool-calling, mcp, agents, multi-agent-systems, memory, planning, evaluation, guardrails, apis, orchestration, monitoring, security, deployment.
+
 You MUST call the save_entry tool with your result. Do not output any text.`;
 
 const SYSTEM_PROMPT = `You are an AI systems analyst for "Signal Desk" by Clarent, a learning platform that teaches how modern AI systems are built.
@@ -312,6 +354,18 @@ Capture "Community AI Workflow" and "Roundtable" stories as use_case entries. St
 5. If the newsletter contains no genuine AI news items, return an empty array.
 
 NEVER invent missing instructions, prompts, outcomes, benchmark scores, or prices. If the source doesn't provide them, leave the field empty/null.
+
+MODEL RELEASES — ONLY WITH DATA:
+Only classify an entry as "model_release" if it reports at least one benchmark score OR pricing (input/output). If a story mentions a new model but provides no benchmark or pricing data, classify it as "news" instead. Do NOT create model_release entries for non-model news (e.g., image generation features, bug reports, platform updates).
+
+RISK CLASSIFICATION:
+Only use type "risk" or system_layer "security_governance" for entries about AI risks, AI security, AI safety, AI policy/regulation, or AI governance. General tech business, geopolitics, non-AI security stories, or non-AI regulatory news should be type "news" with system_layer null.
+
+SPONSORED CONTENT:
+Skip sponsored sections entirely — never create entries for them. Sponsored markers include: "Together with", "Sponsored by", "Presented by", "Brought to you by", "In partnership with", "Our partner", ad blocks, and promotional blurbs. Do NOT create entries from these sections.
+
+CONCEPT TAGGING:
+For each entry, pick 1-3 concept IDs from this fixed list that best match: llms, tokens, context-windows, embeddings, prompt-engineering, vector-databases, knowledge-graphs, rag, chunking, metadata, search, tool-calling, mcp, agents, multi-agent-systems, memory, planning, evaluation, guardrails, apis, orchestration, monitoring, security, deployment.
 
 DUPLICATE DETECTION:
 You will receive a list of existing entries from the last 30 days. Only flag an item as a duplicate if it covers the SAME SPECIFIC EVENT or ANNOUNCEMENT as an existing entry. Do NOT flag just because two entries mention the same company or product.
@@ -526,10 +580,34 @@ function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): { entry: Pr
     dupId = raw.duplicate_of_id;
   }
 
+  // ── Model release without any real metrics → downgrade to news ──
+  if (normalizedType === "model_release") {
+    const hasScore = typeof raw.benchmark_score === "number" && !isNaN(raw.benchmark_score);
+    const hasPrice = !!(raw.price_input || raw.price_output);
+    if (!hasScore && !hasPrice) {
+      // Not a real model tracker entry — downgrade to news
+      return null;
+    }
+  }
+
+  // ── Risk entries not about AI → downgrade to news ──
+  let finalType = normalizedType;
+  let finalLayer = layer;
+  if (normalizedType === "risk" || layer === "security_governance") {
+    const tempEntry: ProcessedEntry = {
+      type: normalizedType, system_layer: layer, title: raw.title, summary: raw.summary,
+      business_angle: raw.business_angle, tags: raw.tags,
+    } as ProcessedEntry;
+    if (!isAIRiskEntry(tempEntry)) {
+      finalType = "news";
+      finalLayer = null;
+    }
+  }
+
   return {
     entry: {
-      type: normalizedType,
-      system_layer: layer,
+      type: finalType,
+      system_layer: finalLayer,
       title: cleanTitle(String(raw.title).slice(0, 500)),
       summary: String(raw.summary).slice(0, 2000),
       why_it_matters: raw.why_it_matters ? String(raw.why_it_matters) : null,
@@ -548,6 +626,7 @@ function sanitizeEntry(raw: ProcessedEntry, recentIds: Set<string>): { entry: Pr
       result: raw.result ? String(raw.result) : null,
       duplicate_of_id: dupId,
       duplicate_of_title: dupId ? (raw.duplicate_of_title || null) : null,
+      concepts: detectConcepts(raw as ProcessedEntry, Array.isArray(raw.concepts) ? raw.concepts : null),
     } satisfies ProcessedEntry,
   };
 }
@@ -581,6 +660,11 @@ const ENTRY_PROPERTIES = {
   source_url: { type: "string" as const },
   duplicate_of_id: { type: ["string", "null"] as const },
   duplicate_of_title: { type: "string" as const },
+  concepts: {
+    type: "array" as const,
+    items: { type: "string" as const },
+    description: "1-3 concept IDs from this fixed list: llms, tokens, context-windows, embeddings, prompt-engineering, vector-databases, knowledge-graphs, rag, chunking, metadata, search, tool-calling, mcp, agents, multi-agent-systems, memory, planning, evaluation, guardrails, apis, orchestration, monitoring, security, deployment. Pick the most relevant concepts for this entry.",
+  },
 };
 
 // ── Recheck mode: deterministic quality review of existing drafts ──
@@ -699,6 +783,52 @@ Deno.serve(async (req: Request) => {
         if (!updateError) applied++;
       }
       return new Response(JSON.stringify({ applied, total: updates.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── Reclassify risk mode: move non-AI risk entries to Industry (news) ──
+    if (mode === "reclassify_risk") {
+      const { data: riskEntries, error: fetchErr } = await supabase
+        .from("signal_desk_entries")
+        .select("id, title, type, system_layer, summary, business_angle, tags, status")
+        .or("type.eq.risk,system_layer.eq.security_governance")
+        .eq("status", "published");
+
+      if (fetchErr) {
+        return new Response(JSON.stringify({ error: `Failed to load risk entries: ${fetchErr.message}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const moved: Array<{ id: string; title: string; old_type: string; old_layer: string | null }> = [];
+      const kept: Array<{ id: string; title: string }> = [];
+
+      for (const entry of (riskEntries || [])) {
+        const tempEntry: ProcessedEntry = {
+          type: entry.type,
+          system_layer: entry.system_layer,
+          title: entry.title,
+          summary: entry.summary,
+          business_angle: entry.business_angle,
+          tags: entry.tags,
+        } as ProcessedEntry;
+
+        if (!isAIRiskEntry(tempEntry)) {
+          const { error: updateErr } = await supabase
+            .from("signal_desk_entries")
+            .update({ type: "news", system_layer: null })
+            .eq("id", entry.id);
+          if (!updateErr) {
+            moved.push({ id: entry.id, title: entry.title, old_type: entry.type, old_layer: entry.system_layer });
+          }
+        } else {
+          kept.push({ id: entry.id, title: entry.title });
+        }
+      }
+
+      return new Response(JSON.stringify({
+        moved_count: moved.length,
+        kept_count: kept.length,
+        moved,
+        kept,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ── Repair mode: fetch source, find outcome for incomplete use_case entries ──
@@ -901,7 +1031,7 @@ You MUST call the report_result tool with your finding.`;
       autoSourceName = extractSiteName(cleanedUrl, html);
       autoSourceDate = extractPublishDate(html);
     } else if (text && typeof text === "string") {
-      inputText = text;
+      inputText = stripSponsoredSections(text);
     } else {
       return new Response(JSON.stringify({ error: "Provide either a URL or pasted text." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -992,7 +1122,7 @@ You MUST call the report_result tool with your finding.`;
           sources: [notesSource], duplicate_of: null, duplicate_status: "none",
           slug: finalSlug, origin: "original", status: "draft",
           review_status: review.status, review_notes: review.notes.join("; ") || null,
-          concepts: detectConcepts(cleanEntry),
+          concepts: detectConcepts(cleanEntry, Array.isArray((rawEntry as any).concepts) ? (rawEntry as any).concepts : null),
         })
         .select("id, title, type, system_layer, status, review_status, review_notes");
 
@@ -1132,7 +1262,7 @@ You MUST call the report_result tool with your finding.`;
         slug: finalSlug, status: "draft",
         review_status: review.status,
         review_notes: review.notes.join("; ") || null,
-        concepts: detectConcepts(e),
+        concepts: e.concepts || detectConcepts(e),
       };
     });
 
