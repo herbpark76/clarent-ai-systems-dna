@@ -5,6 +5,8 @@ const corsHeaders = {
 };
 
 const ADMIN_EMAIL = "hpark76@gmail.com";
+const DEFAULT_FROM = "AI Systems DNA <notifications@clarenttechnologies.com>";
+const FROM_EMAIL = Deno.env.get("RESEND_FROM") || DEFAULT_FROM;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -21,7 +23,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { learnerName, taskTitle } = await req.json();
+    const { learnerName, taskTitle, learnerEmail } = await req.json();
 
     const subject = `Task submitted: ${taskTitle}`;
     const html = `
@@ -44,8 +46,9 @@ Deno.serve(async (req: Request) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "AI Systems Learn <onboarding@resend.dev>",
+        from: FROM_EMAIL,
         to: ADMIN_EMAIL,
+        ...(learnerEmail ? { reply_to: learnerEmail } : {}),
         subject,
         html,
       }),
@@ -53,8 +56,9 @@ Deno.serve(async (req: Request) => {
 
     if (!res.ok) {
       const errText = await res.text();
+      console.error(`[notify-task-submission] Resend API error (${res.status}): ${errText.slice(0, 300)}`);
       return new Response(
-        JSON.stringify({ success: false, error: errText }),
+        JSON.stringify({ success: false }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

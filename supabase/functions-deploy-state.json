@@ -3,7 +3,7 @@
   "functions": {
     "contact-email": {
       "hasChanged": false,
-      "hash": "8de01fb76b88df75cbabc506478c1da9f90f722cfcbc15256b951f461dbb0937"
+      "hash": "8d611fce997f3ad40db9ac544c88cd01bee0116a2e0fe0dd5deb245fafc51724"
     },
     "invite-learner": {
       "hasChanged": false,
@@ -15,7 +15,7 @@
     },
     "notify-task-submission": {
       "hasChanged": false,
-      "hash": "c27b7260d4c3dfdab9c67b186bf740f247cfcbc79eb5ceae98c0609412fcfbc0"
+      "hash": "7df2fb9e9fa99c2a361882fcda204c8e005b85297dfbc53a95b9619611ae8980"
     },
     "process-newsletter": {
       "hasChanged": false,
@@ -23,7 +23,7 @@
     },
     "weekly-digest": {
       "hasChanged": false,
-      "hash": "b195a9bf4d247d6052c3f12ebc6ded4617726d1051f032e447099e1c8abdf85a"
+      "hash": "e622fe3ed9c9871b8c4d95e5f32c5f76635e3e77134c82d2a782ce77799b1e3a"
     }
   }
 }

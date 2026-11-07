@@ -9,7 +9,8 @@ const corsHeaders = {
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const ADMIN_EMAIL = "hpark76@gmail.com";
 const SITE_ORIGIN = Deno.env.get("SITE_URL") || "https://aisystems.clarenttech.com";
-const FROM_EMAIL = "AI Systems DNA <onboarding@resend.dev>";
+const DEFAULT_FROM = "AI Systems DNA <notifications@clarenttechnologies.com>";
+const FROM_EMAIL = Deno.env.get("RESEND_FROM") || DEFAULT_FROM;
 
 interface WaitlistRow {
   email: string;
@@ -185,7 +186,11 @@ Deno.serve(async (req: Request) => {
             }),
           });
           if (resp.ok) sentCount++;
-          else failCount++;
+          else {
+            const errText = await resp.text();
+            console.error(`[weekly-digest] Resend API error (${resp.status}) for ${sub.email}: ${errText.slice(0, 300)}`);
+            failCount++;
+          }
         } catch {
           failCount++;
         }

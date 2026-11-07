@@ -8,6 +8,8 @@ const corsHeaders = {
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const ADMIN_EMAIL = "hpark76@gmail.com";
+const DEFAULT_FROM = "AI Systems DNA <notifications@clarenttechnologies.com>";
+const FROM_EMAIL = Deno.env.get("RESEND_FROM") || DEFAULT_FROM;
 const SITE_ORIGIN = Deno.env.get("SITE_URL") || "https://aisystems.clarenttech.com";
 
 Deno.serve(async (req: Request) => {
@@ -55,7 +57,7 @@ Deno.serve(async (req: Request) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "AI Systems DNA <onboarding@resend.dev>",
+        from: FROM_EMAIL,
         to: ADMIN_EMAIL,
         reply_to: email,
         subject: emailSubject,

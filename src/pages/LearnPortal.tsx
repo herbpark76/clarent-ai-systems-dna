@@ -2282,6 +2282,7 @@ export default function LearnPortal() {
   const [authChecked, setAuthChecked] = useState(false);
   const [fullName, setFullName] = useState('');
   const [userId, setUserId] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -2342,6 +2343,7 @@ export default function LearnPortal() {
         }
         setAuthed(true);
         setUserId(data.session.user.id);
+        setUserEmail(data.session.user.email || '');
         const role = data.session.user.app_metadata?.role;
         setIsAdmin(role === 'admin');
         const name = data.session.user.user_metadata?.full_name as string | undefined;
@@ -2360,12 +2362,14 @@ export default function LearnPortal() {
       setAuthed(!!session);
       if (session) {
         setUserId(session.user.id);
+        setUserEmail(session.user.email || '');
         const role = session.user.app_metadata?.role;
         setIsAdmin(role === 'admin');
         const name = session.user.user_metadata?.full_name as string | undefined;
         setFullName(name || session.user.email || '');
       } else {
         setUserId('');
+        setUserEmail('');
         setFullName('');
         setIsAdmin(false);
       }
@@ -2694,7 +2698,7 @@ export default function LearnPortal() {
     // Fire-and-forget: notify admin of task submission (never blocks)
     const taskTitle = tasks.find((t) => t.id === taskId)?.title || 'a task';
     supabase.functions.invoke('notify-task-submission', {
-      body: { learnerName: fullName, taskTitle },
+      body: { learnerName: fullName, taskTitle, learnerEmail: userEmail },
     }).catch(() => {/* silent — never block submission */});
   };
 
