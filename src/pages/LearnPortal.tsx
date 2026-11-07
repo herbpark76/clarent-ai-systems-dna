@@ -1007,20 +1007,25 @@ function LearnerDashboard({
   const submittedCount = Array.from(progress.values()).filter((p) => p.status === 'submitted').length;
   const pct = totalTasks > 0 ? Math.round((approvedCount / totalTasks) * 100) : 0;
 
+  const unlockSet = manualUnlocks || new Set<string>();
+
   const taskDueDates = useMemo(() => buildTaskDueDates(startDate, weeks, tasks), [startDate, weeks, tasks]);
   const weekRanges = useMemo(() => buildWeekRanges(startDate, weeks), [startDate, weeks]);
 
-  let overdueCount = 0;
-  let dueThisWeekCount = 0;
-  for (const task of tasks) {
-    const p = progress.get(task.id);
-    const status = p?.status || 'not_started';
-    const dd = taskDueDates.get(task.id) || null;
-    const week = weeks.find((w) => w.id === task.week_id);
-    const weekUnlocked = !week || readOnly || isWeekUnlockedForLearner(week, weeks, tasks, progress, quizAttempts, unlockSet);
-    if (weekUnlocked && isOverdue(dd, status)) overdueCount++;
-    if (isDueThisWeek(dd, status)) dueThisWeekCount++;
-  }
+  const { overdueCount, dueThisWeekCount } = useMemo(() => {
+    let overdue = 0;
+    let dueThisWeek = 0;
+    for (const task of tasks) {
+      const p = progress.get(task.id);
+      const status = p?.status || 'not_started';
+      const dd = taskDueDates.get(task.id) || null;
+      const week = weeks.find((w) => w.id === task.week_id);
+      const weekUnlocked = !week || readOnly || isWeekUnlockedForLearner(week, weeks, tasks, progress, quizAttempts, unlockSet);
+      if (weekUnlocked && isOverdue(dd, status)) overdue++;
+      if (isDueThisWeek(dd, status)) dueThisWeek++;
+    }
+    return { overdueCount: overdue, dueThisWeekCount: dueThisWeek };
+  }, [tasks, progress, taskDueDates, weeks, readOnly, quizAttempts, unlockSet]);
 
   const resourcesByTask = useMemo(() => {
     const map = new Map<string, TaskResource[]>();
@@ -1041,7 +1046,6 @@ function LearnerDashboard({
   const [submitError, setSubmitError] = useState('');
   const entryCountByWeek = getEntryCountByWeek(journalEntries);
 
-  const unlockSet = manualUnlocks || new Set<string>();
   const streak = useMemo(() => computeStreak(weeks, tasks, progress, startDate), [weeks, tasks, progress, startDate]);
   const badges = useMemo(() => computeBadges(weeks, tasks, progress, quizAttempts), [weeks, tasks, progress, quizAttempts]);
 
