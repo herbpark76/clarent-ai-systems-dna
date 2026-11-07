@@ -1,0 +1,49 @@
+{
+  "slug": "chunking-strategies-for-rag",
+  "questions": [
+    {
+      "question": "Why is embedding an entire 40-page contract as a single vector a bad idea?",
+      "options": [
+        "It exceeds the embedding model's token limit",
+        "The averaged-out vector can't be close enough to any specific question to retrieve the right passage",
+        "Vector databases can't store vectors that large",
+        "It costs too much to compute"
+      ],
+      "answer": 1,
+      "explanation": "One vector for a long document averages all its topics together. Retrieval can't pinpoint the specific clause that answers a question."
+    },
+    {
+      "question": "A finance team indexes tax memos that have clear section headings (Nexus, Apportionment, Credits). Which chunking strategy fits best?",
+      "options": [
+        "Fixed-size at 200 tokens with no overlap",
+        "Structure-aware chunking that splits along section boundaries",
+        "Semantic chunking that uses embeddings to find topic shifts",
+        "Embed the entire memo as one chunk"
+      ],
+      "answer": 1,
+      "explanation": "When documents have clear structure, splitting along natural boundaries (headings, sections) produces coherent chunks that each cover one topic."
+    },
+    {
+      "question": "Why add overlap between adjacent chunks?",
+      "options": [
+        "To increase the total number of chunks for better search",
+        "To preserve context that crosses chunk boundaries — like references to 'the threshold described above'",
+        "To reduce embedding cost",
+        "To make the vector database index faster"
+      ],
+      "answer": 1,
+      "explanation": "Overlap (typically 10-15%) ensures that sentences or ideas split at a chunk boundary still have enough surrounding context to be meaningful."
+    },
+    {
+      "question": "What is the most common root cause of bad RAG retrieval that chunking can fix?",
+      "options": [
+        "The model is not powerful enough",
+        "The prompt is too short",
+        "Chunks are cutting ideas in half or mixing multiple topics into one embedding",
+        "The vector database is too slow"
+      ],
+      "answer": 2,
+      "explanation": "If chunks split a rule from its context or merge unrelated topics, the embedding can't represent any single idea clearly. Fixing chunking fixes retrieval."
+    }
+  ]
+}

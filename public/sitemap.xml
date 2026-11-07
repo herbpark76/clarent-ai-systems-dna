@@ -46,6 +46,21 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://aisystems.clarenttech.com/articles/chunking-strategies-for-rag</loc>
+    <lastmod>2026-11-07</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/articles/guardrails-keeping-ai-systems-safe-and-on-task</loc>
+    <lastmod>2026-11-07</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/articles/how-ai-agents-remember-memory-patterns</loc>
+    <lastmod>2026-11-07</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://aisystems.clarenttech.com/articles/how-to-evaluate-ai-systems</loc>
     <lastmod>2026-11-07</lastmod>
     <priority>0.7</priority>
@@ -66,6 +81,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://aisystems.clarenttech.com/articles/prompt-engineering-that-holds-up-in-production</loc>
+    <lastmod>2026-11-07</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://aisystems.clarenttech.com/articles/rag-for-vertical-data</loc>
     <lastmod>2026-11-07</lastmod>
     <priority>0.7</priority>
@@ -77,6 +97,11 @@
   </url>
   <url>
     <loc>https://aisystems.clarenttech.com/articles/what-are-ai-agents</loc>
+    <lastmod>2026-11-07</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/articles/what-are-embeddings</loc>
     <lastmod>2026-11-07</lastmod>
     <priority>0.7</priority>
   </url>
@@ -211,22 +236,7 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/granola-launches-voice-typing-for-dictation-across-any-app</loc>
-    <lastmod>2026-11-06</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://aisystems.clarenttech.com/signal-desk/metr-finds-anthropics-internal-ai-progress-roughly-doubled-driven-by-its-own-ai</loc>
-    <lastmod>2026-11-06</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/google-cuts-gemini-omni-1-2-flash-video-pricing-by-30-and-extends-clip-length</loc>
-    <lastmod>2026-11-06</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/use-ai-to-find-job-openings-tailor-your-resume-and-practice-interviews</loc>
     <lastmod>2026-11-06</lastmod>
     <priority>0.6</priority>
   </url>
@@ -246,7 +256,7 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/rowan-cheungs-three-times-rule-for-deciding-what-to-automate</loc>
+    <loc>https://aisystems.clarenttech.com/signal-desk/arizona-rep-ansari-calls-for-ai-pause-and-superintelligence-ban-as-top-democrati</loc>
     <lastmod>2026-11-06</lastmod>
     <priority>0.6</priority>
   </url>
@@ -256,17 +266,47 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/use-ai-to-find-job-openings-tailor-your-resume-and-practice-interviews</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/rowan-cheungs-three-times-rule-for-deciding-what-to-automate</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/granola-launches-voice-typing-for-dictation-across-any-app</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://aisystems.clarenttech.com/signal-desk/perplexity-launches-teammates-persistent-ai-agents-for-ongoing-projects</loc>
     <lastmod>2026-11-06</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/arizona-rep-ansari-calls-for-ai-pause-and-superintelligence-ban-as-top-democrati</loc>
+    <loc>https://aisystems.clarenttech.com/signal-desk/google-cuts-gemini-omni-1-2-flash-video-pricing-by-30-and-extends-clip-length</loc>
     <lastmod>2026-11-06</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/compare-six-free-ai-tools-to-build-a-personal-ai-toolkit</loc>
+    <lastmod>2026-11-05</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/midterm-voters-back-data-center-limits-and-signal-distrust-of-ai-industry</loc>
+    <lastmod>2026-11-05</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://aisystems.clarenttech.com/signal-desk/pangram-launches-image-1-0-for-detecting-ai-generated-images-and-video</loc>
+    <lastmod>2026-11-05</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/ricursive-releases-ripple-65b-preview-a-us-open-coding-model</loc>
     <lastmod>2026-11-05</lastmod>
     <priority>0.6</priority>
   </url>
@@ -286,11 +326,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/compare-six-free-ai-tools-to-build-a-personal-ai-toolkit</loc>
-    <lastmod>2026-11-05</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://aisystems.clarenttech.com/signal-desk/coding-startup-conductor-joins-meta</loc>
     <lastmod>2026-11-05</lastmod>
     <priority>0.6</priority>
@@ -301,22 +336,12 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/midterm-voters-back-data-center-limits-and-signal-distrust-of-ai-industry</loc>
-    <lastmod>2026-11-05</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/ricursive-releases-ripple-65b-preview-a-us-open-coding-model</loc>
-    <lastmod>2026-11-05</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/google-will-disable-search-alongside-gemini-for-k-12-accounts-that-opt-out-of-ai</loc>
+    <loc>https://aisystems.clarenttech.com/signal-desk/crowdstrike-launches-ai-kill-switch-to-halt-rogue-agents</loc>
     <lastmod>2026-11-04</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/turn-one-product-photo-into-three-studio-shots-with-runway-app-studio</loc>
+    <loc>https://aisystems.clarenttech.com/signal-desk/netflix-rolls-out-ai-discover-tab-for-personalized-content-browsing</loc>
     <lastmod>2026-11-04</lastmod>
     <priority>0.6</priority>
   </url>
@@ -331,17 +356,17 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/crowdstrike-launches-ai-kill-switch-to-halt-rogue-agents</loc>
-    <lastmod>2026-11-04</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://aisystems.clarenttech.com/signal-desk/openai-hires-former-army-secretary-dan-driscoll-as-national-security-counselor</loc>
     <lastmod>2026-11-04</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/netflix-rolls-out-ai-discover-tab-for-personalized-content-browsing</loc>
+    <loc>https://aisystems.clarenttech.com/signal-desk/google-will-disable-search-alongside-gemini-for-k-12-accounts-that-opt-out-of-ai</loc>
+    <lastmod>2026-11-04</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/turn-one-product-photo-into-three-studio-shots-with-runway-app-studio</loc>
     <lastmod>2026-11-04</lastmod>
     <priority>0.6</priority>
   </url>
@@ -356,6 +381,11 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/openai-signs-four-abu-dhabi-deals-spanning-adnoc-government-and-mubadala</loc>
+    <lastmod>2026-11-03</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://aisystems.clarenttech.com/signal-desk/openai-introduces-lifeval-a-benchmark-for-everyday-ai-task-performance</loc>
     <lastmod>2026-11-03</lastmod>
     <priority>0.6</priority>
@@ -367,11 +397,6 @@
   </url>
   <url>
     <loc>https://aisystems.clarenttech.com/signal-desk/reader-built-a-four-agent-research-pipeline-that-fact-checks-itself-using-grok</loc>
-    <lastmod>2026-11-03</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/openai-signs-four-abu-dhabi-deals-spanning-adnoc-government-and-mubadala</loc>
     <lastmod>2026-11-03</lastmod>
     <priority>0.6</priority>
   </url>
@@ -411,12 +436,12 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/video-producer-builds-a-local-claude-app-to-batch-convert-photos-for-editing</loc>
+    <loc>https://aisystems.clarenttech.com/signal-desk/swamp-club-turns-agent-workflows-into-reusable-behaviors-with-vault-secured-secr</loc>
     <lastmod>2026-11-02</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/photography-business-owner-builds-a-three-layer-ai-ops-team-with-mcp-connected-s</loc>
+    <loc>https://aisystems.clarenttech.com/signal-desk/video-producer-builds-a-local-claude-app-to-batch-convert-photos-for-editing</loc>
     <lastmod>2026-11-02</lastmod>
     <priority>0.6</priority>
   </url>
@@ -436,17 +461,17 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/data-centers-become-midterm-ballot-issue-as-openai-plans-ai-compute-campus-rebra</loc>
-    <lastmod>2026-11-02</lastmod>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://aisystems.clarenttech.com/signal-desk/swamp-club-turns-agent-workflows-into-reusable-behaviors-with-vault-secured-secr</loc>
+    <loc>https://aisystems.clarenttech.com/signal-desk/photography-business-owner-builds-a-three-layer-ai-ops-team-with-mcp-connected-s</loc>
     <lastmod>2026-11-02</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://aisystems.clarenttech.com/signal-desk/create-editable-ai-artwork-with-arrow-2-and-inkscape</loc>
+    <lastmod>2026-11-02</lastmod>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://aisystems.clarenttech.com/signal-desk/data-centers-become-midterm-ballot-issue-as-openai-plans-ai-compute-campus-rebra</loc>
     <lastmod>2026-11-02</lastmod>
     <priority>0.6</priority>
   </url>

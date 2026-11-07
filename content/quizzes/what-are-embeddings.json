@@ -1,0 +1,49 @@
+{
+  "slug": "what-are-embeddings",
+  "questions": [
+    {
+      "question": "What is the key property of a good embedding?",
+      "options": [
+        "It compresses text to a single number",
+        "Texts with similar meanings produce vectors that are close together",
+        "It always uses exactly 1,536 dimensions",
+        "It works without any training data"
+      ],
+      "answer": 1,
+      "explanation": "Embeddings map text into a vector space where semantic similarity becomes spatial proximity — nearby points mean similar things."
+    },
+    {
+      "question": "Why must you use the same embedding model for indexing and querying?",
+      "options": [
+        "Different models produce vectors in different coordinate systems, so similarity scores are meaningless",
+        "It's a licensing requirement",
+        "Switching models voids the vector database warranty",
+        "It doesn't actually matter"
+      ],
+      "answer": 0,
+      "explanation": "Each model maps text into its own vector space. Mixing models means comparing positions in different coordinate systems — the distances tell you nothing."
+    },
+    {
+      "question": "Why is embedding an entire 50-page document as one vector a bad idea?",
+      "options": [
+        "It exceeds the model's token limit",
+        "It averages out the meaning of every section, so retrieval can't pinpoint the relevant part",
+        "It costs too much",
+        "It violates vector database schema rules"
+      ],
+      "answer": 1,
+      "explanation": "A single vector for a long document blurs all its topics together. Chunk first, then embed each chunk so retrieval can surface the right section."
+    },
+    {
+      "question": "A user searches 'who can sign off on a $50K purchase' but no policy uses those exact words. What makes embeddings find the right document?",
+      "options": [
+        "Embeddings automatically expand abbreviations",
+        "The query and the matching policy land close together in vector space despite different wording",
+        "The embedding model has a built-in synonym dictionary",
+        "Embeddings fall back to keyword matching when no exact match exists"
+      ],
+      "answer": 1,
+      "explanation": "Embeddings capture meaning, not keywords. The query about signing off on purchases and a policy about expenditure approval are semantically close even with zero word overlap."
+    }
+  ]
+}

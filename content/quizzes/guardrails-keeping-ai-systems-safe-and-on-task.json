@@ -1,0 +1,49 @@
+{
+  "slug": "guardrails-keeping-ai-systems-safe-and-on-task",
+  "questions": [
+    {
+      "question": "What is the primary purpose of guardrails in a production AI system?",
+      "options": [
+        "To make the model generate text faster",
+        "To check inputs and outputs for safety, scope, and compliance before they reach the user",
+        "To reduce the cost of running the model",
+        "To replace the need for human review entirely"
+      ],
+      "answer": 1,
+      "explanation": "Guardrails sit between the model and the user, enforcing constraints that the model itself won't reliably self-enforce."
+    },
+    {
+      "question": "Why is relying on prompt-level constraints alone not sufficient for production?",
+      "options": [
+        "Prompts are too expensive to maintain",
+        "Models don't always follow instructions, especially with adversarial inputs — output checks are also needed",
+        "Prompt-level constraints only work with small models",
+        "The system prompt has a token limit that's too small"
+      ],
+      "answer": 1,
+      "explanation": "Prompt instructions are the first line of defense but can be bypassed. Layer them with classifier-based and rule-based guardrails for robustness."
+    },
+    {
+      "question": "A finance chatbot is asked 'Can I expense a $3,000 team dinner?' What should the guardrail system do?",
+      "options": [
+        "Let the model answer freely — it's a reasonable question",
+        "Block the question entirely and show an error",
+        "Ensure the response explains the policy but does not approve or deny the expense, redirecting to the approval system",
+        "Forward the question to the finance department's email"
+      ],
+      "answer": 2,
+      "explanation": "The system should constrain the model to explaining policy, not making decisions. An output check can catch approval language and replace it with a redirect to the expense system."
+    },
+    {
+      "question": "What should you do when a guardrail triggers and blocks or modifies a response?",
+      "options": [
+        "Silently suppress the response",
+        "Show a helpful fallback response and log the event for monitoring",
+        "Immediately shut down the system",
+        "Retrain the model on the blocked input"
+      ],
+      "answer": 1,
+      "explanation": "Always define fallback responses that are helpful, not just 'I can't do that.' Log every guardrail trigger to understand usage patterns and tune thresholds."
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "slug": "how-ai-agents-remember-memory-patterns",
+  "questions": [
+    {
+      "question": "Why can't a language model remember what was discussed in a previous session?",
+      "options": [
+        "The model's weights are reset between sessions",
+        "Language models are stateless — each request is processed independently with no persistent memory",
+        "The API deletes conversation history automatically",
+        "The context window is too small to hold old data"
+      ],
+      "answer": 1,
+      "explanation": "A model processes each request independently. Memory across sessions is provided by the system around the model, not the model itself."
+    },
+    {
+      "question": "How does long-term memory typically work in a production AI agent?",
+      "options": [
+        "The model stores facts in its own internal weights",
+        "The system embeds past interactions, stores them in a vector database, and retrieves relevant ones at query time",
+        "All past conversations are appended to every new prompt",
+        "The system uses a relational database and SQL queries to find exact matches"
+      ],
+      "answer": 1,
+      "explanation": "Long-term memory uses the RAG pattern: embed past interactions, store in a vector DB, and retrieve the most relevant memories to inject as context."
+    },
+    {
+      "question": "What should you store in long-term memory for an AI assistant?",
+      "options": [
+        "Every raw conversation log for completeness",
+        "Extracted facts, decisions, and open questions — not raw messages",
+        "Only the user's name and email",
+        "Nothing — the model will figure it out"
+      ],
+      "answer": 1,
+      "explanation": "Raw logs are noise. Store extracted, structured information: facts learned, decisions made, and open questions. This keeps retrieval precise."
+    },
+    {
+      "question": "What happens if a memory system never forgets?",
+      "options": [
+        "The system becomes more accurate over time",
+        "Old, outdated memories accumulate and compete with current ones, degrading retrieval quality",
+        "The context window overflows",
+        "The model's latency decreases"
+      ],
+      "answer": 1,
+      "explanation": "Without consolidation or decay, stale memories pile up and crowd out relevant ones. Build in a way to merge, archive, or forget outdated entries."
+    }
+  ]
+}

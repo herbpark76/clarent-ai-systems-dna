@@ -1,0 +1,49 @@
+{
+  "slug": "prompt-engineering-that-holds-up-in-production",
+  "questions": [
+    {
+      "question": "What is the most common reason a prompt works in testing but fails in production?",
+      "options": [
+        "The model gets updated too frequently",
+        "Real users send inputs the prompt was never tested against — edge cases, empty fields, mixed languages",
+        "Production servers run the model at higher temperature",
+        "The prompt exceeds token limits in production"
+      ],
+      "answer": 1,
+      "explanation": "A prompt tested on a few typical examples often breaks on boundary cases. Production prompt engineering means testing what happens when input is empty, malformed, or unexpected."
+    },
+    {
+      "question": "Why is 'Classify this ticket' a weak prompt for an IT ticket classifier?",
+      "options": [
+        "It's too short for the model to process",
+        "It gives no categories, no format, and no guidance for ambiguous cases",
+        "It doesn't mention which model to use",
+        "It needs to be in all caps"
+      ],
+      "answer": 1,
+      "explanation": "Without explicit categories, a fallback, and an output format, the model guesses — and it will guess differently for different inputs."
+    },
+    {
+      "question": "Where should your core instructions live for maximum reliability?",
+      "options": [
+        "In the user message, repeated each time",
+        "In the system prompt",
+        "In a separate document the model retrieves",
+        "In the model's fine-tuning data"
+      ],
+      "answer": 1,
+      "explanation": "System prompts are more reliable than per-message instructions. Keep core instructions in the system prompt; use user messages for the actual data."
+    },
+    {
+      "question": "When should you consider fine-tuning instead of adding more instructions to a prompt?",
+      "options": [
+        "When the prompt exceeds 500 words",
+        "When the behavior is hard to describe in words but easy to show with many examples",
+        "When the model is too slow",
+        "When you want to switch to a smaller model"
+      ],
+      "answer": 1,
+      "explanation": "Prompts are best for behavior you can articulate. Fine-tuning is better when the pattern is implicit and would require an unwieldy number of examples in the prompt."
+    }
+  ]
+}

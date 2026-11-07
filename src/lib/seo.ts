@@ -5,8 +5,10 @@
 const SITE_ORIGIN = 'https://aisystems.clarenttech.com';
 const SITE_NAME = 'AI Systems DNA';
 const DEFAULT_TITLE = 'AI Systems DNA — Learn How Modern AI Systems Are Built';
+import { CONCEPTS } from '../data/concepts';
+
 const DEFAULT_DESCRIPTION =
-  'An interactive map of the 25 core concepts behind production AI — LLMs, RAG, agents, MCP, evaluation, and orchestration — with learning paths from beginner to architect.';
+  `An interactive map of the ${CONCEPTS.length} core concepts behind production AI — LLMs, RAG, agents, MCP, evaluation, and orchestration — with learning paths from beginner to architect.`;
 const DEFAULT_IMAGE = `${SITE_ORIGIN}/og-image.png`;
 
 type MetaInput = {

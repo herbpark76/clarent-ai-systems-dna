@@ -339,7 +339,7 @@ export default function HomePage() {
             </span>
           </h1>
           <p className="max-w-2xl mx-auto text-base text-white/45 leading-relaxed mb-6">
-            An interactive map of the 25 core concepts behind production AI — from LLMs and RAG to agents, MCP, evaluation, and orchestration.
+            An interactive map of the {CONCEPTS.length} core concepts behind production AI — from LLMs and RAG to agents, MCP, evaluation, and orchestration.
           </p>
 
           {/* Mode Toggle */}
