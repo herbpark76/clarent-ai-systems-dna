@@ -11,10 +11,36 @@ import { setPageMeta } from '../lib/seo';
 
 const ALL_LAYERS: (SystemLayer | 'all')[] = ['all', 'model', 'agent', 'tools_connectors', 'data_context', 'evals', 'security_governance', 'interface'];
 
+const ROLE_CANONICAL: Record<string, string> = {
+  it: 'IT',
+  finance: 'Finance',
+  legal: 'Legal',
+  marketing: 'Marketing',
+  ops: 'Ops',
+  operations: 'Ops',
+  tax: 'Tax',
+};
+
+function canonicalizeRole(raw: string): string {
+  const key = raw.toLowerCase().trim();
+  if (ROLE_CANONICAL[key]) return ROLE_CANONICAL[key];
+  if (!key) return '';
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function canonicalizeTag(raw: string): string {
+  let key = raw.toLowerCase().trim();
+  if (!key) return '';
+  if (key.length > 3 && key.endsWith('s') && !key.endsWith('ss')) {
+    key = key.slice(0, -1);
+  }
+  return key;
+}
+
 function UseCaseCard({ entry }: { entry: SignalEntry }) {
   const steps = normalizeSteps(entry.steps);
-  const tags = normalizeStringArray(entry.tags);
-  const roleTags = normalizeStringArray(entry.role_tags);
+  const tags = normalizeStringArray(entry.tags).map(canonicalizeTag).filter(Boolean);
+  const roleTags = normalizeStringArray(entry.role_tags).map(canonicalizeRole).filter(Boolean);
   const date = getSourceDate(entry);
 
   return (
@@ -80,17 +106,18 @@ interface TagInfo {
 }
 
 function buildNormalizedTagMap(entries: SignalEntry[], field: 'tags' | 'role_tags'): TagInfo[] {
+  const canonFn = field === 'role_tags' ? canonicalizeRole : canonicalizeTag;
   const counts = new Map<string, { canonical: string; count: number }>();
   for (const e of entries) {
     const raw = normalizeStringArray(e[field]);
     for (const t of raw) {
-      const key = t.toLowerCase().trim();
-      if (!key) continue;
-      const existing = counts.get(key);
+      const canonical = canonFn(t);
+      if (!canonical) continue;
+      const existing = counts.get(canonical);
       if (existing) {
         existing.count++;
       } else {
-        counts.set(key, { canonical: key, count: 1 });
+        counts.set(canonical, { canonical, count: 1 });
       }
     }
   }
@@ -98,8 +125,9 @@ function buildNormalizedTagMap(entries: SignalEntry[], field: 'tags' | 'role_tag
 }
 
 function entryMatchesNormalizedTag(entry: SignalEntry, field: 'tags' | 'role_tags', canonicalTag: string): boolean {
+  const canonFn = field === 'role_tags' ? canonicalizeRole : canonicalizeTag;
   const raw = normalizeStringArray(entry[field]);
-  return raw.some((t) => t.toLowerCase().trim() === canonicalTag);
+  return raw.some((t) => canonFn(t) === canonicalTag);
 }
 
 function UseCasesInner() {
