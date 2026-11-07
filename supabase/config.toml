@@ -6,3 +6,6 @@ verify_jwt = true
 
 [functions.learn-coach]
 verify_jwt = true
+
+[functions.notify-task-submission]
+verify_jwt = true

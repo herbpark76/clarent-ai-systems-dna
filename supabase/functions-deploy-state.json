@@ -1,0 +1,21 @@
+{
+  "projectId": "68432154",
+  "functions": {
+    "invite-learner": {
+      "hasChanged": false,
+      "hash": "f84bce62342c0c38f3cf66992107390023f2e49cd272ae7676b3c2c7f06ba7d7"
+    },
+    "learn-coach": {
+      "hasChanged": false,
+      "hash": "284cd9c0f1e8fb81ffc3af2f7bf8240e41c281d21f639bd5b4cb9c1aaaa2b1f1"
+    },
+    "process-newsletter": {
+      "hasChanged": false,
+      "hash": "05fab9907c33694568dac0903a4d544a5547fd756fe66b2c6898bacc2a456932"
+    },
+    "notify-task-submission": {
+      "hasChanged": false,
+      "hash": "c27b7260d4c3dfdab9c67b186bf740f247cfcbc79eb5ceae98c0609412fcfbc0"
+    }
+  }
+}

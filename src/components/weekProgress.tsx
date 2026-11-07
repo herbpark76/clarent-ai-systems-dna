@@ -34,9 +34,12 @@ export function computeWeekUnlock(
   }
 
   const prevWeekTasks = tasks.filter((t) => t.week_id === prevWeek.id);
-  const prevApproved = prevWeekTasks.filter((t) => progress.get(t.id)?.status === 'approved').length;
+  const prevSubmittedOrApproved = prevWeekTasks.filter((t) => {
+    const s = progress.get(t.id)?.status;
+    return s === 'approved' || s === 'submitted';
+  }).length;
 
-  if (prevApproved < prevWeekTasks.length) {
+  if (prevSubmittedOrApproved < prevWeekTasks.length) {
     return {
       locked: true,
       reason: `Unlocks when Week ${prevWeek.week_number} is complete.`,
@@ -54,6 +57,19 @@ export function computeWeekUnlock(
   }
 
   return { locked: false, reason: null, manualUnlock: false };
+}
+
+// ── Week Unlock Check (for overdue gating) ────────────
+
+export function isWeekUnlockedForLearner(
+  week: Week,
+  weeks: Week[],
+  tasks: Task[],
+  progress: Map<string, ProgressRow>,
+  quizAttempts: QuizAttempt[],
+  manualUnlocks: Set<string>,
+): boolean {
+  return !computeWeekUnlock(week, weeks, tasks, progress, quizAttempts, manualUnlocks).locked;
 }
 
 // ── Streak Calculation ──────────────────────────────────

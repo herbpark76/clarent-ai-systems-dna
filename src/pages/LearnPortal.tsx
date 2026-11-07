@@ -31,6 +31,7 @@ import { generateInterviewQuestion, gradeInterview, type QuizAttempt, type Inter
 import {
   computeWeekUnlock, computeStreak, computeBadges, StreakBadgesSection,
   CelebrationOverlay, SessionPrepModal, AdminUnlockButton, fetchManualUnlocks,
+  isWeekUnlockedForLearner,
   type WeekUnlockInfo,
 } from '../components/weekProgress';
 import { setPageMeta } from '../lib/seo';
@@ -299,9 +300,9 @@ function StatusIcon({ status, className = 'w-4 h-4' }: { status: TaskStatus; cla
 }
 
 // ── Due Date Badge ─────────────────────────────────────
-function DueDateBadge({ dueDate, status }: { dueDate: string | null; status: TaskStatus }) {
+function DueDateBadge({ dueDate, status, weekUnlocked = true }: { dueDate: string | null; status: TaskStatus; weekUnlocked?: boolean }) {
   if (!dueDate || status === 'submitted' || status === 'approved') return null;
-  const overdue = isOverdue(dueDate, status);
+  const overdue = weekUnlocked && isOverdue(dueDate, status);
   const dueSoon = isDueSoon(dueDate, status);
 
   if (overdue) {
@@ -964,7 +965,9 @@ function LearnerDashboard({
     const p = progress.get(task.id);
     const status = p?.status || 'not_started';
     const dd = taskDueDates.get(task.id) || null;
-    if (isOverdue(dd, status)) overdueCount++;
+    const week = weeks.find((w) => w.id === task.week_id);
+    const weekUnlocked = !week || readOnly || isWeekUnlockedForLearner(week, weeks, tasks, progress, quizAttempts, unlockSet);
+    if (weekUnlocked && isOverdue(dd, status)) overdueCount++;
     if (isDueThisWeek(dd, status)) dueThisWeekCount++;
   }
 
@@ -1201,7 +1204,7 @@ function LearnerDashboard({
                                     <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(dd)}
                                   </span>
                                 )}
-                                <DueDateBadge dueDate={dd} status={status} />
+                                <DueDateBadge dueDate={dd} status={status} weekUnlocked={!isLocked} />
                                 <StatusBadge status={status} reviewedAt={p?.reviewed_at} />
                               </div>
 
@@ -1720,6 +1723,7 @@ function LearnerDetailTabs({
             const wr = weekRanges.get(week.id);
             const weekResourceCount = weekTasks.reduce((sum, t) => sum + (resourcesByTask.get(t.id)?.length || 0), 0);
             const weekQuizAttempts = learnerQuizAttempts.filter((a) => a.week_id === week.id);
+            const adminWeekUnlocked = isWeekUnlockedForLearner(week, weeks, tasks, progressMap, learnerQuizAttempts, adminManualUnlocks);
             return (
               <div key={week.id} className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
                 <div className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.05]">
@@ -1774,7 +1778,7 @@ function LearnerDetailTabs({
                                   <Calendar className="w-2.5 h-2.5" /> Due {formatDueDate(dd)}
                                 </span>
                               )}
-                              <DueDateBadge dueDate={dd} status={status} />
+                              <DueDateBadge dueDate={dd} status={status} weekUnlocked={adminWeekUnlocked} />
                               <StatusBadge status={status} reviewedAt={p?.reviewed_at} />
                             </div>
 
@@ -2203,6 +2207,18 @@ function AdminDashboard({
       </div>
       <p className="text-sm text-white/40 mb-6">Track: {track.title}</p>
 
+      {(() => {
+        const totalAwaiting = sortedLearners.reduce((sum, l) => sum + l.awaitingReviewCount, 0);
+        return totalAwaiting > 0 ? (
+          <div className="mb-4 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] px-4 py-3 flex items-center gap-2">
+            <ClipboardCheck className="w-4 h-4 text-cyan-400" />
+            <span className="text-sm font-semibold text-cyan-300">
+              {totalAwaiting} {totalAwaiting === 1 ? 'task' : 'tasks'} awaiting review across all learners
+            </span>
+          </div>
+        ) : null;
+      })()}
+
       {sortedLearners.length === 0 ? (
         <div className="text-center py-12 rounded-xl border border-white/[0.05] bg-white/[0.01]">
           <Users className="w-8 h-8 text-white/15 mx-auto mb-3" />
@@ -2412,6 +2428,20 @@ export default function LearnPortal() {
 
         const sortedWeeks = [...weeks].sort((a, b) => a.week_number - b.week_number);
 
+        // Load all quiz attempts for unlock checks
+        const { data: allQuizAttempts } = await supabase.from('lp_quiz_attempts').select('*');
+        if (cancelled) return;
+        const allQuizRows = (allQuizAttempts || []) as QuizAttempt[];
+
+        // Load all manual unlocks for unlock checks
+        const { data: allUnlocks } = await supabase.from('lp_week_unlocks').select('learner_id, week_id');
+        if (cancelled) return;
+        const unlocksByLearner = new Map<string, Set<string>>();
+        for (const u of (allUnlocks || [])) {
+          if (!unlocksByLearner.has(u.learner_id)) unlocksByLearner.set(u.learner_id, new Set());
+          unlocksByLearner.get(u.learner_id)!.add(u.week_id as string);
+        }
+
         const learnerInfos: LearnerInfo[] = traineeRows.map((t) => {
           const pRows = byLearner.get(t.id) || [];
           const approvedCount = pRows.filter((p) => p.status === 'approved').length;
@@ -2420,12 +2450,18 @@ export default function LearnPortal() {
           // Compute per-learner task due dates
           const dueDates = buildTaskDueDates(t.start_date, weeks, tasks);
 
+          const learnerProgressMap = new Map(pRows.map((p) => [p.task_id, p]));
+          const learnerQuizAttempts = allQuizRows.filter((a) => a.learner_id === t.id);
+          const learnerManualUnlocks = unlocksByLearner.get(t.id) || new Set<string>();
+
           let overdueCount = 0;
           for (const task of tasks) {
             const p = pRows.find((pr) => pr.task_id === task.id);
             const status = p?.status || 'not_started';
             const dd = dueDates.get(task.id) || null;
-            if (isOverdue(dd, status)) overdueCount++;
+            const week = weeks.find((w) => w.id === task.week_id);
+            const weekUnlocked = !week || isWeekUnlockedForLearner(week, weeks, tasks, learnerProgressMap, learnerQuizAttempts, learnerManualUnlocks);
+            if (weekUnlocked && isOverdue(dd, status)) overdueCount++;
           }
 
           // Compute current week from per-learner dates
@@ -2469,11 +2505,12 @@ export default function LearnPortal() {
         const journalRows = (allJournal || []) as JournalEntry[];
         setLearnerJournalEntries(journalRows);
 
-        // Load all quiz attempts and interview practice for admin view
-        const { data: allQuiz } = await supabase.from('lp_quiz_attempts').select('*').order('created_at', { ascending: false });
-        if (!cancelled) setLearnerQuizAttempts((allQuiz || []) as QuizAttempt[]);
+        // Set quiz and interview data for admin detail views
+        if (!cancelled) setLearnerQuizAttempts(allQuizRows);
         const { data: allInterview } = await supabase.from('lp_interview_practice').select('*').order('created_at', { ascending: false });
         if (!cancelled) setLearnerInterviewPractice((allInterview || []) as InterviewPracticeRow[]);
+
+        // Add latest journal entry date per learner
         const journalByLearner = new Map<string, JournalEntry[]>();
         for (const je of journalRows) {
           if (!journalByLearner.has(je.learner_id)) journalByLearner.set(je.learner_id, []);
@@ -2653,6 +2690,12 @@ export default function LearnPortal() {
         }
       }
     }
+
+    // Fire-and-forget: notify admin of task submission (never blocks)
+    const taskTitle = tasks.find((t) => t.id === taskId)?.title || 'a task';
+    supabase.functions.invoke('notify-task-submission', {
+      body: { learnerName: fullName, taskTitle },
+    }).catch(() => {/* silent — never block submission */});
   };
 
   // ── Admin: approve task ──
@@ -2818,8 +2861,16 @@ export default function LearnPortal() {
       <div className="fixed top-14 right-0 z-40 px-4 sm:px-6 lg:px-8 py-2">
         <div className="flex items-center gap-3">
           {isAdmin && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300">
               Admin
+              {(() => {
+                const total = learners.reduce((sum, l) => sum + l.awaitingReviewCount, 0);
+                return total > 0 ? (
+                  <span className="ml-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-cyan-500/80 text-white text-[9px] font-bold leading-none">
+                    {total}
+                  </span>
+                ) : null;
+              })()}
             </span>
           )}
           <button onClick={() => setShowChangePassword(true)} className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors">
