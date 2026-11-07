@@ -30,7 +30,7 @@ This unlocks three capabilities that production AI systems depend on:
 
 ## How embeddings are made
 
-An embedding model is typically a transformer trained on a large text corpus. During training, it learns to place semantically related text close together. When you send it a passage, it outputs a fixed-length vector — say, 1,536 numbers.
+An embedding model is typically a transformer trained on a large text corpus. During training, it learns to place semantically related text close together. When you send it a passage, it outputs a fixed-length vector — often several hundred to a few thousand numbers.
 
 The critical practical detail: **you must use the same embedding model for indexing and querying.** If you embed your documents with one model and the question with another, the vectors live in different coordinate systems and the similarity scores are meaningless.
 
@@ -48,7 +48,7 @@ That gap — between what people type and what documents say — is why embeddin
 
 Several factors affect which model fits your use case:
 
-- **Dimensionality.** Higher dimensions can capture more nuance but cost more to store and search. Most production systems land between 384 and 1,536 dimensions.
+- **Dimensionality.** Higher dimensions can capture more nuance but cost more to store and search. Common models range from a few hundred to a few thousand dimensions.
 - **Language support.** If your content is in Spanish or Japanese, make sure the model was trained on that language. Some models are English-only.
 - **Domain fit.** General-purpose models work well for most text. If your content is highly technical — medical records, legal contracts, code — a domain-specific model may retrieve better.
 - **Speed.** Embedding speed matters when you're indexing millions of documents or doing real-time queries.

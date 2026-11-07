@@ -57,7 +57,7 @@ Suppose a finance team indexes a library of tax research memos. Each memo is 5-1
 
 **Structure-aware chunking** splits along the memo's section headings. Each chunk is a complete section: "Nexus Rules," "Apportionment Factors," "Credit Calculations." Retrieval can now surface exactly the apportionment section with its full context, including any cross-references within that section.
 
-The difference in retrieval quality between these two approaches can be dramatic, and it costs nothing to switch — just a different splitting function.
+The difference in retrieval quality between these two approaches can be dramatic, and switching is usually inexpensive: a different splitting function plus a re-index of the documents.
 
 ## Overlap: why it helps
 
@@ -65,7 +65,7 @@ Even with structure-aware chunking, adding a small overlap (10-15% of the chunk 
 
 ## Metadata: chunking's partner
 
-Chunking determines *what* gets embedded. Metadata determines *what gets filtered before embedding is even searched*. Attaching metadata — source, date, jurisdiction, document type — to each chunk lets you scope retrieval before the vector search runs. This is often more impactful than tuning chunk size.
+Chunking determines *what* gets embedded. Metadata determines *what can be filtered before the vector search runs*. Attaching metadata — source, date, jurisdiction, document type — to each chunk lets you scope retrieval before the vector search runs. This is often more impactful than tuning chunk size.
 
 ## Common mistakes
 
@@ -76,7 +76,7 @@ Chunking determines *what* gets embedded. Metadata determines *what gets filtere
 
 ## Key takeaways
 
-- Chunking is the single highest-leverage tuning parameter in a RAG pipeline.
+- Chunking is one of the highest-leverage tuning decisions in a RAG pipeline.
 - The sweet spot is usually a few hundred words — enough for a complete idea, not so much that meaning dilutes.
 - Match the strategy to the document: fixed-size for uniform text, structure-aware for structured documents, semantic for unstructured text.
 - Always add overlap and always evaluate retrieval quality on real queries.

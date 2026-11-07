@@ -24,7 +24,7 @@
       "explanation": "Without explicit categories, a fallback, and an output format, the model guesses — and it will guess differently for different inputs."
     },
     {
-      "question": "Where should your core instructions live for maximum reliability?",
+      "question": "Where should stable, core instructions usually live?",
       "options": [
         "In the user message, repeated each time",
         "In the system prompt",

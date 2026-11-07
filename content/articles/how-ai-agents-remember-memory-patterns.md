@@ -55,7 +55,7 @@ Suppose a firm builds an AI assistant that helps tax analysts research client qu
 
 **Without long-term memory:** Every session starts from scratch. The analyst re-explains the client's industry, their past positions, and the specific rules they're working within. The assistant redoes work it already did last week.
 
-**With long-term memory:** After each session, the system stores a summary — "Client X is a SaaS company in Texas. We determined that their bundled training services are taxable under Rule 3.2. Open question: whether the maintenance contract is also taxable." On the next session, when the analyst asks about the maintenance contract, the system retrieves that summary and injects it. The assistant picks up where it left off.
+**With long-term memory:** After each session, the system stores a summary — "Client X is a SaaS company in Texas. We determined that their bundled training services are taxable under the relevant state rule. Open question: whether the maintenance contract is also taxable." On the next session, when the analyst asks about the maintenance contract, the system retrieves that summary and injects it. The assistant picks up where it left off.
 
 The model didn't remember anything. The system retrieved the right context and handed it to the model. That's the core pattern.
 
@@ -66,7 +66,7 @@ The model didn't remember anything. The system retrieved the right context and h
 Don't store raw conversation logs — they're too noisy. Extract and store:
 - **Facts:** "User is in the manufacturing industry."
 - **Decisions:** "We chose approach B over approach A because of cost."
-- **Open questions:** "Still need to verify whether Rule 3.2 applies to the maintenance contract."
+- **Open questions:** "Still need to verify whether that rule applies to the maintenance contract."
 
 ### When to retrieve
 

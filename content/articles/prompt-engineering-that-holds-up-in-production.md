@@ -10,9 +10,9 @@ updated: 2026-11-06
 
 A prompt that works on three examples in a notebook can fall apart in production. Real users type things you didn't expect, ask questions in different languages, paste in malformed data, and combine requests in ways no one planned for. Prompt engineering for production is about making your instructions robust enough to handle that.
 
-## Why prompts matter more than model choice
+## Why prompts matter
 
-Switching to a more expensive model often delivers less improvement than rewriting a weak prompt. A well-structured prompt on a mid-tier model can outperform a vague prompt on the best model available. That makes prompting the highest-ROI skill for anyone building with AI — and the one most likely to be done poorly.
+Before reaching for a bigger model, check the prompt. Many disappointing results come from vague or underspecified instructions, and fixing the prompt is usually the cheapest improvement you can make. That makes prompting one of the highest-ROI skills for anyone building with AI.
 
 ## The anatomy of a production prompt
 
@@ -23,7 +23,7 @@ A solid prompt typically has four parts:
 3. **The data.** The actual input — retrieved documents, a user question, a document to classify.
 4. **Output format.** How should it respond? "Return a JSON object with fields: answer, confidence, sources."
 
-Putting the instructions before the data (not after) gives the model a frame to interpret what follows. Putting the output format at the end (or in the system prompt) keeps it from getting lost.
+Keep instructions and data clearly separated. With long documents, many model providers recommend putting the documents first and the question or task after them; whichever order you use, label each part so the model can tell instructions from content.
 
 ## Techniques that hold up
 
@@ -88,7 +88,7 @@ The second prompt is explicit about categories, handles ambiguity ("pick the mos
 
 - **Vague instructions.** "Be helpful" or "answer appropriately" leave too much room for interpretation. The model will fill in the blanks, and not always the way you want.
 - **No fallback.** If the model doesn't know what to do, it will guess. Tell it what to do when it's unsure.
-- **Putting instructions in user turns.** System prompts are more reliable than per-message instructions. Keep your core instructions in the system prompt and use user messages for data.
+- **Putting instructions in user turns.** Keep stable, core instructions in the system prompt and use user messages for the specific task and data, so the rules don't get lost or contradicted from turn to turn.
 - **Not testing edge cases.** A prompt that works on typical inputs may fail on empty inputs, very long inputs, or inputs in mixed languages. Test the boundaries.
 
 ## Prompt engineering vs. fine-tuning
@@ -97,7 +97,7 @@ If you keep adding instructions to handle more cases and your prompt is getting 
 
 ## Key takeaways
 
-- A well-structured prompt on a mid-tier model can outperform a vague prompt on the best model.
+- Fix the prompt before upgrading the model; it is usually the cheapest improvement.
 - Use the four-part structure: role, instructions, data, output format.
 - Be explicit about edge cases and fallbacks — never leave the model to guess.
 - Test across boundary cases, not just the typical inputs.
