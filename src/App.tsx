@@ -1,25 +1,42 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ComponentType } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
 import HomePage from './pages/HomePage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
-const ArticlePage = lazy(() => import('./components/ArticlePage'));
-const ConceptPage = lazy(() => import('./components/ConceptPage'));
-const AdminSignalDesk = lazy(() => import('./pages/AdminSignalDesk'));
-const AdminSubscribers = lazy(() => import('./pages/AdminSubscribers'));
-const SignalDeskPage = lazy(() => import('./pages/SignalDeskPage'));
-const EntryDetailPage = lazy(() => import('./pages/EntryDetailPage'));
-const LabsPage = lazy(() => import('./pages/LabsPage'));
-const UseCasesPage = lazy(() => import('./pages/UseCasesPage'));
-const ModelsPage = lazy(() => import('./pages/ModelsPage'));
-const RiskPage = lazy(() => import('./pages/RiskPage'));
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-const LearnPortal = lazy(() => import('./pages/LearnPortal'));
-const ContactPage = lazy(() => import('./pages/ContactPage'));
-const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
-const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage'));
+function lazyRetry<T extends { default: ComponentType<Record<string, unknown>> }>(
+  factory: () => Promise<T>,
+): ReturnType<typeof lazy<T>> {
+  return lazy(() =>
+    factory().catch((err) => {
+      const KEY = '__vite_retry_ts';
+      const stored = sessionStorage.getItem(KEY);
+      const now = Date.now();
+      if (!stored || now - parseInt(stored, 10) > 10_000) {
+        sessionStorage.setItem(KEY, String(now));
+        window.location.reload();
+      }
+      throw err;
+    }),
+  );
+}
+
+const ArticlePage = lazyRetry(() => import('./components/ArticlePage'));
+const ConceptPage = lazyRetry(() => import('./components/ConceptPage'));
+const AdminSignalDesk = lazyRetry(() => import('./pages/AdminSignalDesk'));
+const AdminSubscribers = lazyRetry(() => import('./pages/AdminSubscribers'));
+const SignalDeskPage = lazyRetry(() => import('./pages/SignalDeskPage'));
+const EntryDetailPage = lazyRetry(() => import('./pages/EntryDetailPage'));
+const LabsPage = lazyRetry(() => import('./pages/LabsPage'));
+const UseCasesPage = lazyRetry(() => import('./pages/UseCasesPage'));
+const ModelsPage = lazyRetry(() => import('./pages/ModelsPage'));
+const RiskPage = lazyRetry(() => import('./pages/RiskPage'));
+const NotFoundPage = lazyRetry(() => import('./pages/NotFoundPage'));
+const LearnPortal = lazyRetry(() => import('./pages/LearnPortal'));
+const ContactPage = lazyRetry(() => import('./pages/ContactPage'));
+const PrivacyPage = lazyRetry(() => import('./pages/PrivacyPage'));
+const UnsubscribePage = lazyRetry(() => import('./pages/UnsubscribePage'));
 
 function PageLoader() {
   return (

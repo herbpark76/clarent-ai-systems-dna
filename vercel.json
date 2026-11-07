@@ -1,7 +1,7 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/signal-desk/:slug",
+      "src": "/signal-desk/:slug",
       "has": [
         {
           "type": "header",
@@ -9,8 +9,34 @@
           "value": "(?i).*((LinkedInBot)|(Slackbot)|(Twitterbot)|(facebookexternalhit)|(Facebot)).*"
         }
       ],
-      "destination": "/api/signal-desk-entry"
+      "dest": "/api/signal-desk-entry"
     },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "src": "/assets/(.*)",
+      "check": true,
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "src": "/assets/(.*)",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    },
+    {
+      "src": "/index.html",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    }
   ]
 }
