@@ -116,14 +116,27 @@ function AttachmentChip({
       window.open(previewUrl, '_blank');
       return;
     }
-    if (!signedUrl) {
-      const url = await getSignedUrl(fileName);
-      if (url) {
-        setSignedUrl(url);
-        window.open(url, '_blank');
+    if (signedUrl) {
+      window.open(signedUrl, '_blank');
+      return;
+    }
+    const win = window.open('', '_blank');
+    const url = await getSignedUrl(fileName);
+    if (url) {
+      setSignedUrl(url);
+      if (win) {
+        win.location.href = url;
+      } else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
       }
     } else {
-      window.open(signedUrl, '_blank');
+      if (win) win.close();
     }
   };
 
@@ -183,18 +196,34 @@ function AttachmentDisplayItem({
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const handleClick = async () => {
     if (url) {
       window.open(url, '_blank');
       return;
     }
+    const win = window.open('', '_blank');
     setLoading(true);
+    setError(false);
     const signedUrl = await getSignedUrl(attachment.file_path);
     setLoading(false);
     if (signedUrl) {
-      setSignedUrl(signedUrl);
-      window.open(signedUrl, '_blank');
+      setUrl(signedUrl);
+      if (win) {
+        win.location.href = signedUrl;
+      } else {
+        const a = document.createElement('a');
+        a.href = signedUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    } else {
+      if (win) win.close();
+      setError(true);
     }
   };
 
@@ -212,6 +241,8 @@ function AttachmentDisplayItem({
         )}
         {loading ? (
           <Loader2 className="w-3 h-3 text-white/40 animate-spin flex-shrink-0" />
+        ) : error ? (
+          <span className="text-[10px] text-red-400 truncate max-w-[120px]">Could not open file</span>
         ) : (
           <span className="text-xs text-white/60 truncate max-w-[120px]">{attachment.file_name}</span>
         )}

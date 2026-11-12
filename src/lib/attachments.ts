@@ -121,7 +121,7 @@ export async function fetchAttachmentsByLearner(learnerId: string): Promise<Atta
 export async function getSignedUrl(filePath: string): Promise<string | null> {
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .createSignedUrl(filePath, 3600);
+    .createSignedUrl(filePath, 600);
   if (error) return null;
   return data.signedUrl;
 }
