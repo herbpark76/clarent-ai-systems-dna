@@ -38,7 +38,7 @@ export async function getCoachFeedback(params: {
   attachment_files?: string[];
   target_learner_id?: string;
 }): Promise<CoachFeedback> {
-  return callCoach({ mode: 'feedback', ...params }) as Promise<CoachFeedback>;
+  return callCoach({ mode: 'feedback', ...params }) as unknown as Promise<CoachFeedback>;
 }
 
 export interface QuizQuestion {
@@ -72,7 +72,7 @@ export async function gradeQuiz(params: {
   week_id?: string;
   target_learner_id?: string;
 }): Promise<QuizGradeResult> {
-  return callCoach({ mode: 'quiz', action: 'grade', ...params }) as Promise<QuizGradeResult>;
+  return callCoach({ mode: 'quiz', action: 'grade', ...params }) as unknown as Promise<QuizGradeResult>;
 }
 
 export async function generateInterviewQuestion(params: {
@@ -94,7 +94,7 @@ export async function gradeInterview(params: {
   answer: string;
   target_learner_id?: string;
 }): Promise<InterviewGrade> {
-  return callCoach({ mode: 'interview', action: 'grade', ...params }) as Promise<InterviewGrade>;
+  return callCoach({ mode: 'interview', action: 'grade', ...params }) as unknown as Promise<InterviewGrade>;
 }
 
 export async function generateSessionPrep(params: {

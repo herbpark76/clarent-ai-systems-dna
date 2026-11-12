@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Lock, Unlock, Flame, Award, Copy, Check, Loader2, X, ClipboardList } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { generateSessionPrep } from '../lib/learnCoach';
-import type { Week, Task, ProgressRow, QuizAttempt, JournalEntry, TaskStatus } from './coachTypes';
+import type { Week, Task, ProgressRow, JournalEntry } from './coachTypes';
+import type { QuizAttempt } from '../lib/learnCoach';
 
 // ── Week Lock Logic ─────────────────────────────────────
 

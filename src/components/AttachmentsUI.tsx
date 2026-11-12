@@ -27,7 +27,7 @@ export function AttachmentDropzone({
   const handleFiles = useCallback((fileList: FileList) => {
     const newFiles: PendingFile[] = [];
     for (const file of Array.from(fileList)) {
-      const error = validateFile(file);
+      const error = validateFile(file) || undefined;
       const previewUrl = isImage(file.type) ? URL.createObjectURL(file) : '';
       newFiles.push({ file, previewUrl, error });
     }
@@ -88,7 +88,7 @@ export function AttachmentDropzone({
               key={i}
               fileName={pf.file.name}
               mimeType={pf.file.type}
-              previewUrl={pf.previewUrl}
+              previewUrl={pf.previewUrl || undefined}
               error={pf.error}
               onRemove={() => onRemoveFile(i)}
             />

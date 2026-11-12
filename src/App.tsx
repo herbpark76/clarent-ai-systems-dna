@@ -5,9 +5,9 @@ import HomePage from './pages/HomePage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
-function lazyRetry<T extends { default: ComponentType<Record<string, unknown>> }>(
+function lazyRetry<T extends { default: React.ComponentType<any> }>(
   factory: () => Promise<T>,
-): ReturnType<typeof lazy<T>> {
+): React.LazyExoticComponent<React.ComponentType<any>> {
   return lazy(() =>
     factory().catch((err) => {
       const KEY = '__vite_retry_ts';

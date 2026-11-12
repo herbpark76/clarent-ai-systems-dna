@@ -56,7 +56,14 @@ export interface ProgressRow {
 export interface JournalEntry {
   id: string;
   learner_id: string;
-  week_id: string;
-  entry_text: string;
+  week_id: string | null;
+  entry_text?: string;
   entry_date: string;
+  built: string;
+  broke: string;
+  learned: string;
+  questions: string | null;
+  hours: number | null;
+  created_at: string;
+  updated_at: string;
 }

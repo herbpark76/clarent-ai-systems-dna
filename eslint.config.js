@@ -23,6 +23,10 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+      '@typescript-eslint/no-use-before-define': [
+        'error',
+        { variables: true, functions: false, classes: false, allowNamedExports: true },
+      ],
     },
   }
 );
