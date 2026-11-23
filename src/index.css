@@ -213,3 +213,10 @@
 .article-body tbody tr:hover {
   background: rgba(255, 255, 255, 0.02);
 }
+
+/* Readability: the faintest grey text sat below WCAG AA contrast on the dark
+   background. Lift the lowest tiers so labels, dates and card descriptions are
+   readable. Placeholders, borders and backgrounds are unaffected. */
+.text-white\/20, .text-white\/25, .text-white\/30 { color: rgb(255 255 255 / 0.5); }
+.text-white\/35, .text-white\/40 { color: rgb(255 255 255 / 0.58); }
+.text-white\/45 { color: rgb(255 255 255 / 0.62); }

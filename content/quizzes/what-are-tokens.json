@@ -1,0 +1,39 @@
+{
+  "slug": "what-are-tokens",
+  "questions": [
+    {
+      "question": "Roughly how many English words are in 100 tokens?",
+      "options": ["About 25", "About 75", "Exactly 100", "About 400"],
+      "answer": 1,
+      "explanation": "In everyday English, one token is about four characters, or roughly three-quarters of a word, so 100 tokens is about 75 words."
+    },
+    {
+      "question": "When you ask a third question in a chat about a pasted document, what are you charged input tokens for?",
+      "options": [
+        "Only the new question",
+        "Only the model's last answer",
+        "The document, the earlier messages and the new question",
+        "Nothing. Follow-up questions are free"
+      ],
+      "answer": 2,
+      "explanation": "The model has no memory between turns, so the app resends the conversation, including the document, with every new message."
+    },
+    {
+      "question": "Why might a model miscount the letters in a word?",
+      "options": [
+        "It sees chunks of text (tokens), not individual letters",
+        "Counting is turned off to save money",
+        "It is trained only on numbers",
+        "The word is outside its context window"
+      ],
+      "answer": 0,
+      "explanation": "Words are split into tokens before the model sees them, so tasks that depend on single characters can trip it up. Asking it to go step by step or use a tool helps."
+    },
+    {
+      "question": "Which usually costs more per token?",
+      "options": ["Input tokens", "Output tokens", "They always cost the same", "Neither. Tokens are free"],
+      "answer": 1,
+      "explanation": "Most providers charge several times more for the tokens a model writes than for the tokens it reads."
+    }
+  ]
+}

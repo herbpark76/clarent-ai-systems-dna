@@ -161,7 +161,13 @@ function LabsInner() {
 
   useEffect(() => {
     fetchPublishedByType('tutorial')
-      .then((data) => { setEntries(data); setLoading(false); })
+      .then((data) => {
+        // Newest first by the date of the source issue, not the date it was imported
+        const sorted = [...data].sort((x, y) =>
+          (getSourceDate(y) ?? y.created_at).localeCompare(getSourceDate(x) ?? x.created_at));
+        setEntries(sorted);
+        setLoading(false);
+      })
       .catch(() => { setError(true); setLoading(false); });
   }, []);
 

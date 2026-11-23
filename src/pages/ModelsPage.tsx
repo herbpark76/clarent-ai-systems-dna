@@ -93,17 +93,27 @@ function ModelTable({ entries, sortKey, sortDir, onSort }: {
 }
 
 function RecommendationCard({ entries }: { entries: SignalEntry[] }) {
-  const withScores = entries.filter((e) => e.benchmark_score != null);
   const withInputPrices = entries.filter((e) => parsePrice(e.price_input) != null);
 
-  // Best overall: highest benchmark_score (only meaningful if same benchmark_name, but we pick the highest)
+  // Scores from different benchmarks can't be compared, so rank only on the
+  // benchmark that covers the most models.
+  const benchmarkCounts: Record<string, number> = {};
+  for (const e of entries) {
+    if (e.benchmark_score != null && e.benchmark_name) {
+      benchmarkCounts[e.benchmark_name] = (benchmarkCounts[e.benchmark_name] ?? 0) + 1;
+    }
+  }
+  const mainBenchmark = Object.entries(benchmarkCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const withScores = entries.filter((e) => e.benchmark_score != null && e.benchmark_name === mainBenchmark);
+
+  // Highest score on the main benchmark
   const bestOverall = withScores.length > 0
     ? [...withScores].sort((a, b) => (b.benchmark_score ?? 0) - (a.benchmark_score ?? 0))[0]
     : null;
 
-  // Best value: highest score per dollar (input price)
+  // Best value: highest main-benchmark score per dollar (input price)
   const bestValue = (() => {
-    const candidates = entries.filter((e) => e.benchmark_score != null && parsePrice(e.price_input) != null);
+    const candidates = withScores.filter((e) => parsePrice(e.price_input) != null);
     if (candidates.length === 0) return null;
     return [...candidates].sort((a, b) => {
       const aRatio = (a.benchmark_score ?? 0) / (parsePrice(a.price_input) || 1);
@@ -145,29 +155,29 @@ function RecommendationCard({ entries }: { entries: SignalEntry[] }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card
           icon={Trophy}
-          title="Best overall"
+          title="Highest score"
           model={bestOverall}
-          detail={bestOverall ? `Score: ${bestOverall.benchmark_score} on ${bestOverall.benchmark_name || 'benchmark'}` : ''}
+          detail={bestOverall ? `${bestOverall.benchmark_score} on ${bestOverall.benchmark_name}` : ''}
           color="text-amber-400"
         />
         <Card
           icon={TrendingUp}
           title="Best value"
           model={bestValue}
-          detail={bestValue ? `Score ${bestValue.benchmark_score} at $${parsePrice(bestValue.price_input)}/M input` : ''}
+          detail={bestValue ? `${bestValue.benchmark_score} on ${bestValue.benchmark_name}, at $${parsePrice(bestValue.price_input)} per million input tokens` : ''}
           color="text-emerald-400"
         />
         <Card
           icon={DollarSign}
           title="Cheapest"
           model={cheapest}
-          detail={cheapest ? `$${parsePrice(cheapest.price_input)}/M input, $${parsePrice(cheapest.price_output)}/M output` : ''}
+          detail={cheapest ? `$${parsePrice(cheapest.price_input)} input / $${parsePrice(cheapest.price_output)} output, per million tokens` : ''}
           color="text-cyan-400"
         />
       </div>
-      {bestOverall && bestOverall.benchmark_name && (
-        <p className="text-[10px] text-white/25 mt-2">
-          Scores are only comparable within the same benchmark. "{bestOverall.benchmark_name}" may not cover all models listed.
+      {mainBenchmark && (
+        <p className="text-[11px] text-white/45 mt-2">
+          "Highest score" and "Best value" compare only models with a {mainBenchmark} score ({withScores.length} of {entries.length}). Scores from different benchmarks can't be compared. New to model pricing? See <Link to="/concepts/tokens" className="text-cyan-400/80 hover:text-cyan-300">what tokens are</Link>.
         </p>
       )}
     </div>

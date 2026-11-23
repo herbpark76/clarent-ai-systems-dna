@@ -49,7 +49,7 @@ export default function GoalSelector({ onSelect }: Props) {
     <div className="w-full max-w-4xl mx-auto">
       <div className="text-center mb-6">
         <h3 className="text-xl font-bold text-white mb-2">What are you trying to build?</h3>
-        <p className="text-sm text-white/40">Select a goal to get a personalized learning roadmap with highlighted concepts and guided progression.</p>
+        <p className="text-sm text-white/40">Pick one and we will highlight the concepts you need on the map, in the order to learn them.</p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-2.5">

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Clock, AlertTriangle, ArrowRight, ArrowUpRight, BookOpen, Newspaper,
+  Lightbulb, MessageSquareText, CheckCircle2, GraduationCap,
 } from 'lucide-react';
+import { PLAIN_ENGLISH } from '../data/plainEnglish';
+import { getLessonPosition, lessonUrl } from '../lib/lessonNav';
 import { loadContent, type ContentData } from '../lib/contentService';
 import { CONCEPTS, EDGES, CLUSTER_META } from '../data/concepts';
 import { LEARNING_PATH_DEFS } from '../data/learningPaths';
@@ -47,15 +50,12 @@ const fallbackContent: ContentData = {
   conceptsMap: Object.fromEntries(CONCEPTS.map((c) => [c.id, c])),
 };
 
-function computeReadTime(concept: typeof CONCEPTS[0]): number {
-  const text = [concept.description, concept.whyItMatters, concept.whyShouldICare, concept.commonMistakes.join(' ')].join(' ');
-  const words = text.split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.round(words / 200));
-}
-
 
 export default function ConceptPage() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const pathParam = searchParams.get('path');
   const [content, setContent] = useState<ContentData>(fallbackContent);
   const [progress, setProgress] = useState<Record<string, ProgressStatus>>(loadProgress);
   const [articleMetas, setArticleMetas] = useState<ArticleMeta[]>([]);
@@ -71,7 +71,10 @@ export default function ConceptPage() {
   useEffect(() => { saveProgress(progress); }, [progress]);
 
   const concept = slug ? (content.conceptsMap[slug] ?? null) : null;
-  const readTime = concept ? computeReadTime(concept) : 1;
+  const lesson = concept ? getLessonPosition(pathParam, concept.id) : null;
+  const plain = concept ? PLAIN_ENGLISH[concept.id] : undefined;
+
+  useEffect(() => { window.scrollTo(0, 0); }, [slug]);
 
   // Load Signal Desk entries for this concept
   useEffect(() => {
@@ -95,6 +98,13 @@ export default function ConceptPage() {
 
   const handleSetProgress = (id: string, status: ProgressStatus) => {
     setProgress((prev) => ({ ...prev, [id]: status }));
+  };
+
+  const handleCompleteAndContinue = () => {
+    if (!concept || !lesson) return;
+    handleSetProgress(concept.id, 'completed');
+    if (lesson.nextId) navigate(lessonUrl(lesson.nextId, lesson.path.id));
+    else navigate('/#learning-paths');
   };
 
   if (!concept) {
@@ -138,12 +148,37 @@ export default function ConceptPage() {
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-24">
           {/* Back link */}
           <Link
-            to="/#system-map"
-            className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors mb-8 group"
+            to={lesson ? '/#learning-paths' : '/#system-map'}
+            className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors mb-6 group"
           >
             <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-            System Map
+            {lesson ? 'All learning paths' : 'System Map'}
           </Link>
+
+          {/* Lesson bar (only when opened from a learning path) */}
+          {lesson && (
+            <div className="mb-8 p-4 rounded-xl border border-white/[0.08] bg-white/[0.03]">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <GraduationCap className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-white truncate">{lesson.path.level}: {lesson.path.label}</span>
+                </div>
+                <span className="text-xs text-white/50 flex-shrink-0">Lesson {lesson.index + 1} of {lesson.total}</span>
+              </div>
+              <div className="flex gap-1">
+                {lesson.path.conceptIds.map((id, i) => (
+                  <Link
+                    key={id}
+                    to={lessonUrl(id, lesson.path.id)}
+                    title={getLabel(id)}
+                    className={`h-1.5 flex-1 rounded-full transition-colors ${
+                      i === lesson.index ? 'bg-cyan-400' : progress[id] === 'completed' ? 'bg-emerald-500/70' : 'bg-white/[0.12] hover:bg-white/25'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Header */}
           <div className="mb-8">
@@ -157,11 +192,12 @@ export default function ConceptPage() {
             <h1 className="text-3xl sm:text-4xl font-bold text-white leading-tight mb-2">{concept.label}</h1>
             <div className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-white/25" />
-              <span className="text-xs text-white/30">~{readTime} min read</span>
+              <span className="text-xs text-white/30">~{concept.estimatedMinutes} min {plain?.lesson ? 'lesson' : 'read'}</span>
             </div>
           </div>
 
-          {/* Progress tracker */}
+          {/* Progress tracker (in a lesson, the "Mark done" button at the end does this) */}
+          {!lesson && (
           <div className="mb-8">
             <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-2">
               Your Progress
@@ -184,8 +220,35 @@ export default function ConceptPage() {
             </div>
           </div>
 
-          {/* Description */}
+          )}
+
+          {/* In plain English */}
+          {plain && (
+            <div className="mb-6">
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-cyan-300/80 mb-2">In plain English</div>
+              <p className="text-lg text-white/90 leading-relaxed mb-5">{plain.plain}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="p-4 rounded-xl border border-white/[0.08] bg-white/[0.03]">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-300" />
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-white/50">An everyday comparison</span>
+                  </div>
+                  <p className="text-sm text-white/70 leading-relaxed">{plain.analogy}</p>
+                </div>
+                <div className="p-4 rounded-xl border border-white/[0.08] bg-white/[0.03]">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <MessageSquareText className="w-3.5 h-3.5 text-emerald-300" />
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-white/50">Where you've seen it</span>
+                  </div>
+                  <p className="text-sm text-white/70 leading-relaxed">{plain.example}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Description (the more precise version) */}
           <div className="mb-6">
+            {plain && <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-2">A bit more precisely</div>}
             <p className="text-base text-white/65 leading-relaxed">{concept.description}</p>
           </div>
 
@@ -200,6 +263,28 @@ export default function ConceptPage() {
             <p className="text-sm text-white/60 leading-relaxed">{concept.whyItMatters}</p>
             <p className="text-sm text-white/55 leading-relaxed mt-2">{concept.whyShouldICare}</p>
           </div>
+
+          {/* Full lesson */}
+          {plain?.lesson && (() => {
+            const lessonMeta = articleMetas.find((m) => m.slug === plain.lesson);
+            if (!lessonMeta) return null;
+            const href = `/articles/${lessonMeta.slug}?from=${concept.id}${lesson ? `&path=${lesson.path.id}` : ''}`;
+            return (
+              <Link
+                to={href}
+                className="mb-6 flex items-center justify-between gap-4 p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/[0.08] hover:bg-cyan-500/[0.14] transition-colors group"
+              >
+                <div className="min-w-0">
+                  <div className="text-[10px] font-semibold uppercase tracking-widest text-cyan-300/80 mb-1">Read the full lesson</div>
+                  <div className="text-sm font-semibold text-white">{lessonMeta.title}</div>
+                  <div className="text-xs text-white/50 mt-0.5">
+                    {lessonMeta.readTime}{quizSlugs.has(lessonMeta.slug) ? ' · short quiz at the end' : ''}
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-cyan-300 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            );
+          })()}
 
           {/* Common Mistakes */}
           <div className="mb-6">
@@ -220,7 +305,7 @@ export default function ConceptPage() {
           </div>
 
           {/* Next Recommended Step */}
-          {nextStep && (
+          {nextStep && !lesson && (
             <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] mb-6">
               <div className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400/80 mb-2">
                 Next Recommended Step
@@ -239,7 +324,7 @@ export default function ConceptPage() {
           )}
 
           {/* Prerequisites */}
-          {concept.prerequisites.length > 0 && (
+          {!lesson && concept.prerequisites.length > 0 && (
             <div className="mb-6">
               <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-2">
                 Requires Understanding
@@ -265,7 +350,7 @@ export default function ConceptPage() {
           )}
 
           {/* Unlocks Next */}
-          {concept.unlocksNext.length > 0 && (
+          {!lesson && concept.unlocksNext.length > 0 && (
             <div className="mb-6">
               <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-2">
                 Unlocks Next
@@ -291,6 +376,7 @@ export default function ConceptPage() {
           )}
 
           {/* Related tech */}
+          {!lesson && (
           <div className="mb-6">
             <div className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-2">
               Related Technologies
@@ -304,10 +390,12 @@ export default function ConceptPage() {
             </div>
           </div>
 
+          )}
+
           {/* Go deeper: related articles */}
-          {(() => {
+          {!lesson && (() => {
             const relatedArticles = articleMetas.filter((m) =>
-              m.concepts && m.concepts.includes(concept.id)
+              m.concepts && m.concepts.includes(concept.id) && m.slug !== plain?.lesson
             );
             if (relatedArticles.length === 0) return null;
             return (
@@ -369,7 +457,33 @@ export default function ConceptPage() {
             </div>
           )}
 
+          {/* Lesson navigation */}
+          {lesson && (
+            <div className="mt-10 pt-8 border-t border-white/[0.08]">
+              <button
+                onClick={handleCompleteAndContinue}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-semibold hover:from-blue-400 hover:to-cyan-400 transition-all shadow-lg shadow-blue-500/20"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {lesson.nextId ? `Mark done and go to lesson ${lesson.index + 2}: ${getLabel(lesson.nextId)}` : 'Mark done and finish the path'}
+              </button>
+              <div className="flex items-center justify-between mt-4 text-sm">
+                {lesson.prevId ? (
+                  <Link to={lessonUrl(lesson.prevId, lesson.path.id)} className="inline-flex items-center gap-1.5 text-white/50 hover:text-white transition-colors">
+                    <ArrowLeft className="w-3.5 h-3.5" /> {getLabel(lesson.prevId)}
+                  </Link>
+                ) : <span />}
+                {lesson.nextId && (
+                  <Link to={lessonUrl(lesson.nextId, lesson.path.id)} className="inline-flex items-center gap-1.5 text-white/50 hover:text-white transition-colors">
+                    Skip to {getLabel(lesson.nextId)} <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Footer back link */}
+          {!lesson && (
           <div className="mt-12 pt-8 border-t border-white/[0.05]">
             <Link
               to="/#system-map"
@@ -379,6 +493,7 @@ export default function ConceptPage() {
               Back to System Map
             </Link>
           </div>
+          )}
         </div>
       </div>
     </div>

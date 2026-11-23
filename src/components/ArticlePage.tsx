@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { getLessonPosition, lessonUrl } from '../lib/lessonNav';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft, Clock, Calendar, ChevronRight, BookOpen, CheckCircle2, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock, Calendar, ChevronRight, BookOpen, CheckCircle2, FileText } from 'lucide-react';
 import { loadArticleBySlug, loadQuizBySlug, getQuizSlugs, type QuizData } from '../lib/articles';
 import type { ArticleMeta } from '../lib/frontmatter';
 import { loadContent, type ContentData } from '../lib/contentService';
@@ -22,6 +23,9 @@ const fallbackContent: ContentData = {
 
 export default function ArticlePage() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const fromConcept = searchParams.get('from');
+  const fromPath = searchParams.get('path');
   const [article, setArticle] = useState<{ meta: ArticleMeta; body: string } | null | undefined>(undefined);
   const [content, setContent] = useState<ContentData>(fallbackContent);
   const [quiz, setQuiz] = useState<QuizData | null | undefined>(undefined);
@@ -35,6 +39,7 @@ export default function ArticlePage() {
 
   useEffect(() => {
     if (!slug) return;
+    window.scrollTo(0, 0);
     setArticle(undefined);
     setQuiz(undefined);
     setRead(slug ? isArticleRead(slug) : false);
@@ -103,12 +108,21 @@ export default function ArticlePage() {
     .map((id) => content.conceptsMap[id])
     .filter((c): c is Concept => !!c);
 
-  const backLink = meta.track === 'domain-builder'
+  // Opened from a lesson? Send the reader back to it, and offer the next lesson at the end.
+  const lessonConcept = fromConcept ? content.conceptsMap[fromConcept] : undefined;
+  const lesson = lessonConcept ? getLessonPosition(fromPath, lessonConcept.id) : null;
+  const lessonHref = lessonConcept
+    ? (lesson ? lessonUrl(lessonConcept.id, lesson.path.id) : `/concepts/${lessonConcept.id}`)
+    : null;
+
+  const backLink = lessonHref ?? (meta.track === 'domain-builder'
     ? '/#domain-track'
-    : '/#deep-dives';
-  const backLabel = meta.track === 'domain-builder'
-    ? 'Domain Platform Builder'
-    : 'Deep Dives';
+    : '/#deep-dives');
+  const backLabel = lessonConcept
+    ? `Back to the ${lessonConcept.label} lesson`
+    : meta.track === 'domain-builder'
+      ? 'Domain Platform Builder'
+      : 'Deep Dives';
 
   return (
     <div className="min-h-screen bg-[#080c14] text-white font-sans antialiased">
@@ -126,6 +140,11 @@ export default function ArticlePage() {
             <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
             {backLabel}
           </Link>
+          {lesson && (
+            <div className="-mt-5 mb-8 text-[11px] text-white/40">
+              {lesson.path.level} path · Lesson {lesson.index + 1} of {lesson.total}
+            </div>
+          )}
 
           {/* Article header */}
           <div className="mb-10">
@@ -174,6 +193,28 @@ export default function ArticlePage() {
           {/* Quiz */}
           {quiz && (
             <Quiz quiz={quiz} onComplete={handleQuizComplete} />
+          )}
+
+          {/* Continue the path */}
+          {lesson && (
+            <div className="mt-10 p-5 rounded-xl border border-cyan-500/25 bg-cyan-500/[0.06]">
+              <div className="text-sm font-semibold text-white mb-1">
+                {lesson.nextId ? 'Ready for the next lesson?' : 'That was the last lesson in this path.'}
+              </div>
+              <p className="text-xs text-white/55 mb-4">
+                Go back to the {lessonConcept!.label} lesson to mark it done{lesson.nextId ? ', or jump straight to the next one.' : '.'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link to={lessonHref!} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-white/15 bg-white/[0.05] text-sm text-white/80 hover:bg-white/[0.1] transition-colors">
+                  <ArrowLeft className="w-3.5 h-3.5" /> {lessonConcept!.label} lesson
+                </Link>
+                {lesson.nextId && (
+                  <Link to={lessonUrl(lesson.nextId, lesson.path.id)} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-sm font-semibold text-white hover:from-blue-400 hover:to-cyan-400 transition-colors">
+                    Next: {content.conceptsMap[lesson.nextId]?.label ?? lesson.nextId} <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Related concepts */}

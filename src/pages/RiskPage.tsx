@@ -44,7 +44,7 @@ function RiskCard({ entry }: { entry: SignalEntry }) {
         )}
         {entry.how_its_built && (
           <div className="mb-2">
-            <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wide">How it's built</span>
+            <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wide">Likely cause (our read, not confirmed by the source)</span>
             <p className="text-xs text-white/55 leading-relaxed mt-0.5">{entry.how_its_built}</p>
           </div>
         )}

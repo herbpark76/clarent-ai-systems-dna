@@ -1,0 +1,49 @@
+{
+  "slug": "what-is-a-context-window",
+  "questions": [
+    {
+      "question": "What is a model's context window?",
+      "options": [
+        "Everything the model can see in one request, measured in tokens",
+        "The time limit for a chat session",
+        "The list of websites the model was trained on",
+        "A saved history of all your past chats"
+      ],
+      "answer": 0,
+      "explanation": "The context window holds the instructions, conversation, files and reply for one request. Anything outside it, the model cannot see."
+    },
+    {
+      "question": "Why does a long chat start 'forgetting' things you said early on?",
+      "options": [
+        "The model gets tired",
+        "Older messages are dropped or summarized when the window fills up",
+        "The app deletes your messages after an hour",
+        "The model only reads the first message"
+      ],
+      "answer": 1,
+      "explanation": "The full conversation is resent every turn. When it no longer fits, apps cut or summarize older messages, so those details are lost or shortened."
+    },
+    {
+      "question": "A model has a very large context window. Which statement is true?",
+      "options": [
+        "It will use every part of a long document equally well",
+        "It no longer needs RAG",
+        "It can see more text, but answers can still miss details buried in long inputs",
+        "It remembers you between conversations"
+      ],
+      "answer": 2,
+      "explanation": "A big window means the text fits, not that the model pays equal attention to all of it. Sending only the relevant material still tends to give better answers."
+    },
+    {
+      "question": "How is 'memory' different from the context window?",
+      "options": [
+        "They are the same thing",
+        "Memory is a few saved notes that get placed back into the context window in later conversations",
+        "Memory is unlimited and doesn't use tokens",
+        "Memory replaces the context window"
+      ],
+      "answer": 1,
+      "explanation": "Memory features save key facts and put them back on the 'desk' at the start of a new chat. They still have to fit in the context window."
+    }
+  ]
+}

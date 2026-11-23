@@ -124,6 +124,9 @@ export default function ConceptMap({ concepts, edges, selectedId, onSelect, road
     const svg = svgRef.current;
     if (!svg) return;
     const onWheel = (e: WheelEvent) => {
+      // Plain scrolling should move the page, not trap people in the map.
+      // Zoom only with Ctrl/Cmd + scroll (this also covers trackpad pinch, which sends ctrlKey).
+      if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
       const pt = svg.createSVGPoint();
       pt.x = e.clientX;
@@ -439,7 +442,7 @@ export default function ConceptMap({ concepts, edges, selectedId, onSelect, road
       {/* Hint */}
       {!selectedId && !inRoadmapMode && !currentLessonId && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-xs text-white/35 pointer-events-none">
-          {isTouch ? 'Tap any node to explore · Pinch to zoom · Drag to pan' : 'Click any node to explore · Scroll to zoom · Drag to pan'}
+          {isTouch ? 'Tap any node to explore · Pinch to zoom · Drag to pan' : 'Click any concept to explore · Ctrl/⌘ + scroll or +/− to zoom · Drag to pan'}
         </div>
       )}
       {!selectedId && inRoadmapMode && !currentLessonId && (

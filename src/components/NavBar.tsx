@@ -2,20 +2,32 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Network, Menu, X, ChevronDown } from 'lucide-react';
 
-const NAV_LINKS = [
-  { label: 'System Map', href: '/#system-map' },
-  { label: 'Learning Paths', href: '/#learning-paths' },
-  { label: 'Deep Dives', href: '/#deep-dives' },
-  { label: 'AI DNA', href: '/#ai-dna' },
-  { label: 'Contact', href: '/contact' },
+interface NavItem { label: string; href: string; desc?: string }
+
+// Three groups instead of seven links: learn, explore, news.
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Learn',
+    items: [
+      { label: 'Learning Paths', href: '/#learning-paths', desc: 'Short lesson series, from beginner up' },
+      { label: 'Deep Dives', href: '/#deep-dives', desc: 'One topic in depth, with a quiz' },
+      { label: 'Labs', href: '/labs', desc: 'Hands-on tutorials with checklists' },
+    ],
+  },
+  {
+    label: 'Explore',
+    items: [
+      { label: 'System Map', href: '/#system-map', desc: 'All 24 concepts and how they connect' },
+      { label: 'Use-Case Library', href: '/use-cases', desc: 'How people are using AI at work' },
+      { label: 'Model Tracker', href: '/models', desc: 'Compare AI models side by side' },
+      { label: 'AI Risk & Governance', href: '/risk', desc: 'What can go wrong and how to control it' },
+    ],
+  },
 ];
 
-const SIGNAL_DESK_LINKS = [
-  { label: 'Signal Desk', href: '/signal-desk', desc: 'Latest AI news by system layer' },
-  { label: 'Labs', href: '/labs', desc: 'Hands-on tutorials with checklists' },
-  { label: 'Use-Case Library', href: '/use-cases', desc: 'Real-world AI applications' },
-  { label: 'Model Tracker', href: '/models', desc: 'Compare AI models side by side' },
-  { label: 'AI Risk & Governance', href: '/risk', desc: 'Risks, controls, and governance' },
+const NAV_LINKS: NavItem[] = [
+  { label: 'News', href: '/signal-desk' },
+  { label: 'Contact', href: '/contact' },
 ];
 
 function scrollToHash(hash: string) {
@@ -26,7 +38,7 @@ function scrollToHash(hash: string) {
 
 export default function NavBar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [signalDeskOpen, setSignalDeskOpen] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = window.location;
 
@@ -41,7 +53,7 @@ export default function NavBar() {
     if (href.startsWith('/#')) {
       e.preventDefault();
       setMobileMenuOpen(false);
-      setSignalDeskOpen(false);
+      setOpenGroup(null);
       const hash = href.slice(1);
       if (window.location.pathname === '/') {
         scrollToHash(hash);
@@ -51,7 +63,7 @@ export default function NavBar() {
       }
     } else {
       setMobileMenuOpen(false);
-      setSignalDeskOpen(false);
+      setOpenGroup(null);
     }
   };
 
@@ -71,6 +83,34 @@ export default function NavBar() {
             </div>
           </Link>
           <div className="hidden md:flex items-center gap-0.5">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label} className="relative">
+                <button
+                  onClick={() => setOpenGroup(openGroup === group.label ? null : group.label)}
+                  onBlur={() => setTimeout(() => setOpenGroup((g) => (g === group.label ? null : g)), 150)}
+                  className={`flex items-center gap-1 ${navLinkClass}`}
+                  aria-expanded={openGroup === group.label}
+                >
+                  {group.label}
+                  <ChevronDown className={`w-3 h-3 transition-transform ${openGroup === group.label ? 'rotate-180' : ''}`} />
+                </button>
+                {openGroup === group.label && (
+                  <div className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-white/10 bg-[#0c1118] shadow-xl shadow-black/40 overflow-hidden">
+                    {group.items.map((l) => (
+                      <Link
+                        key={l.href}
+                        to={l.href}
+                        onClick={(e) => handleHashClick(e, l.href)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-white/[0.05] transition-colors block"
+                      >
+                        <div className="text-xs font-semibold text-white">{l.label}</div>
+                        {l.desc && <div className="text-[11px] text-white/50 leading-tight mt-0.5">{l.desc}</div>}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
             {NAV_LINKS.map((l) => (
               <Link
                 key={l.label}
@@ -81,32 +121,6 @@ export default function NavBar() {
                 {l.label}
               </Link>
             ))}
-            {/* Signal Desk dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setSignalDeskOpen(!signalDeskOpen)}
-                onBlur={() => setTimeout(() => setSignalDeskOpen(false), 150)}
-                className={`flex items-center gap-1 ${navLinkClass}`}
-              >
-                Signal Desk
-                <ChevronDown className={`w-3 h-3 transition-transform ${signalDeskOpen ? 'rotate-180' : ''}`} />
-              </button>
-              {signalDeskOpen && (
-                <div className="absolute right-0 top-full mt-1 w-64 rounded-xl border border-white/10 bg-[#0c1118] shadow-xl shadow-black/40 overflow-hidden">
-                  {SIGNAL_DESK_LINKS.map((l) => (
-                    <Link
-                      key={l.href}
-                      to={l.href}
-                      onClick={() => setSignalDeskOpen(false)}
-                      className="w-full text-left px-4 py-2.5 hover:bg-white/[0.05] transition-colors block"
-                    >
-                      <div className="text-xs font-semibold text-white">{l.label}</div>
-                      <div className="text-[10px] text-white/35 leading-tight mt-0.5">{l.desc}</div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
             <Link
               to="/#waitlist"
               onClick={(e) => handleHashClick(e, '/#waitlist')}
@@ -122,27 +136,38 @@ export default function NavBar() {
       </div>
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-white/[0.06] bg-[#080c14] px-4 py-3 flex flex-col gap-1 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} className="mb-1">
+              <div className="px-3 py-1.5 text-[10px] font-semibold text-white/40 uppercase tracking-wide">{group.label}</div>
+              {group.items.map((l) => (
+                <Link
+                  key={l.href}
+                  to={l.href}
+                  onClick={(e) => handleHashClick(e, l.href)}
+                  className="block px-3 py-2 text-sm text-white/65 hover:text-white rounded-md hover:bg-white/[0.05] transition-all text-left pl-6"
+                >
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+          ))}
           {NAV_LINKS.map((l) => (
             <Link
               key={l.label}
               to={l.href}
               onClick={(e) => handleHashClick(e, l.href)}
-              className="px-3 py-2 text-sm text-white/55 hover:text-white rounded-md hover:bg-white/[0.05] transition-all text-left"
+              className="px-3 py-2 text-sm text-white/65 hover:text-white rounded-md hover:bg-white/[0.05] transition-all text-left"
             >
               {l.label}
             </Link>
           ))}
-          <div className="px-3 py-1.5 text-[10px] font-semibold text-white/30 uppercase tracking-wide">Signal Desk</div>
-          {SIGNAL_DESK_LINKS.map((l) => (
-            <Link
-              key={l.href}
-              to={l.href}
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3 py-2 text-sm text-white/55 hover:text-white rounded-md hover:bg-white/[0.05] transition-all text-left pl-6"
-            >
-              {l.label}
-            </Link>
-          ))}
+          <Link
+            to="/#waitlist"
+            onClick={(e) => handleHashClick(e, '/#waitlist')}
+            className="mt-2 px-3 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-semibold text-center"
+          >
+            Get Updates
+          </Link>
         </div>
       )}
     </nav>

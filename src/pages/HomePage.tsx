@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronRight, ArrowRight,
-  BookOpen, GraduationCap, Wrench, Layers, Building2,
-  Zap, BarChart2, Brain, Search, Bot,
-  Map, Compass, Newspaper,
+  BookOpen, GraduationCap, Wrench, Layers, Building2, Briefcase,
+  Zap, Brain, Map, Compass, Newspaper, Clock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { loadContent, type ContentData } from '../lib/contentService';
@@ -15,7 +14,9 @@ import GoalSelector from '../components/GoalSelector';
 import LearningPathSidebar from '../components/LearningPathSidebar';
 import CompletionScreen from '../components/CompletionScreen';
 import NavBar from '../components/NavBar';
-import { CONCEPTS, EDGES } from '../data/concepts';
+import { CONCEPTS, EDGES, CLUSTER_META, type ClusterType } from '../data/concepts';
+import { PLAIN_ENGLISH } from '../data/plainEnglish';
+import { startLessonUrl } from '../lib/lessonNav';
 import { ROADMAPS, type ProgressStatus, type NextStep } from '../data/roadmaps';
 import { LEARNING_PATH_DEFS } from '../data/learningPaths';
 import { getAllArticleMetas, type ArticleMeta } from '../lib/articles';
@@ -25,6 +26,7 @@ import { setPageMeta } from '../lib/seo';
 type AppMode = 'explore' | 'roadmap';
 
 const CATEGORY_COLORS: Record<string, { color: string; tag: string }> = {
+  Foundation:  { color: 'border-blue-500/30', tag: 'bg-blue-500/15 text-blue-300' },
   Retrieval:   { color: 'border-emerald-500/30', tag: 'bg-emerald-500/15 text-emerald-300' },
   Protocols:   { color: 'border-orange-500/30', tag: 'bg-orange-500/15 text-orange-300' },
   Agents:      { color: 'border-yellow-500/30', tag: 'bg-yellow-500/15 text-yellow-300' },
@@ -36,6 +38,63 @@ const CATEGORY_COLORS: Record<string, { color: string; tag: string }> = {
 
 function getCategoryStyle(category: string) {
   return CATEGORY_COLORS[category] ?? { color: 'border-white/15', tag: 'bg-white/10 text-white/50' };
+}
+
+// New readers should meet the Foundation guides first.
+const DEEP_DIVE_ORDER = [
+  'what-is-an-llm',
+  'what-are-tokens',
+  'what-is-a-context-window',
+  'what-are-embeddings',
+  'what-is-rag',
+  'what-are-ai-agents',
+];
+
+function sortDeepDives(metas: ArticleMeta[]): ArticleMeta[] {
+  const rank = (slug: string) => {
+    const i = DEEP_DIVE_ORDER.indexOf(slug);
+    return i === -1 ? DEEP_DIVE_ORDER.length : i;
+  };
+  return [...metas].sort((a, b) => rank(a.slug) - rank(b.slug) || a.title.localeCompare(b.title));
+}
+
+const CLUSTER_ORDER: ClusterType[] = ['foundation', 'knowledge', 'intelligence', 'production'];
+
+/** On phones the graph is too small to read, so show the same concepts as a simple list. */
+function MobileConceptList() {
+  return (
+    <div className="md:hidden px-4 pb-10 space-y-6">
+      {CLUSTER_ORDER.map((cluster) => {
+        const meta = CLUSTER_META[cluster];
+        const items = CONCEPTS.filter((c) => c.cluster === cluster);
+        return (
+          <div key={cluster}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: meta.stroke }} />
+              <span className={`text-xs font-semibold uppercase tracking-widest ${meta.color}`}>{meta.label}</span>
+            </div>
+            <div className="space-y-2">
+              {items.map((c) => (
+                <Link
+                  key={c.id}
+                  to={`/concepts/${c.id}`}
+                  className="block p-3 rounded-xl border border-white/[0.08] bg-white/[0.03] active:bg-white/[0.07]"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-white">{c.label}</span>
+                    <ChevronRight className="w-4 h-4 text-white/40 flex-shrink-0" />
+                  </div>
+                  {PLAIN_ENGLISH[c.id] && (
+                    <p className="text-xs text-white/55 leading-relaxed mt-1">{PLAIN_ENGLISH[c.id].plain}</p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 const DOMAIN_TRACK_ORDER = [
@@ -55,8 +114,20 @@ const LEARNING_PATHS = [
     border: 'border-sky-500/30',
     accent: 'text-sky-400',
     badge: 'bg-sky-500/20 text-sky-300',
-    topics: ['What is an LLM?', 'How AI reads text', 'Intro to RAG', 'Prompt basics'],
-    description: 'No background required. Understand what these systems are, why they matter, and how the pieces fit together.',
+    topics: ['What is an LLM?', 'How AI reads text', 'Why chats "forget"', 'Answers from your own data'],
+    description: 'Start here if you\'re new. Seven short lessons on what tools like ChatGPT and Claude are doing, in plain English.',
+  },
+  {
+    id: 'leader',
+    icon: Briefcase,
+    level: 'Business Leader',
+    label: 'Make Good Decisions About AI',
+    color: 'from-violet-500/20 to-violet-400/5',
+    border: 'border-violet-500/30',
+    accent: 'text-violet-400',
+    badge: 'bg-violet-500/20 text-violet-300',
+    topics: ['What AI can and can\'t do', 'Answers from your own data', 'Agents and tools', 'Testing and risk'],
+    description: 'For managers and finance, tax and operations leaders. Learn where AI helps, where it goes wrong, and what to ask before it touches your systems.',
   },
   {
     id: 'builder',
@@ -122,7 +193,7 @@ function LatestSignalDeskStrip() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    fetchLatestPublished(6)
+    fetchLatestPublished(6, true)
       .then((data) => { setEntries(data); setLoaded(true); })
       .catch(() => setLoaded(true));
   }, []);
@@ -138,7 +209,8 @@ function LatestSignalDeskStrip() {
               <Newspaper className="w-3 h-3" />
               Signal Desk
             </div>
-            <h2 className="text-2xl font-bold text-white">Latest AI signals</h2>
+            <h2 className="text-2xl font-bold text-white">Latest AI news</h2>
+            <p className="text-sm text-white/40 mt-1">What changed this week, tagged to the concepts it touches.</p>
           </div>
           <Link to="/signal-desk" className="hidden sm:flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors">
             View all <ChevronRight className="w-3 h-3" />
@@ -173,12 +245,10 @@ function LatestSignalDeskStrip() {
 }
 
 export default function HomePage() {
-  const [mode, setMode] = useState<AppMode>(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
-      return 'roadmap';
-    }
-    return 'explore';
-  });
+  const navigate = useNavigate();
+  // Start on the goal picker: it is the easiest way in for someone new.
+  const [mode, setMode] = useState<AppMode>('roadmap');
+  const [showAllDeepDives, setShowAllDeepDives] = useState(false);
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activePath, setActivePath] = useState<{ id: string; index: number } | null>(null);
@@ -265,16 +335,9 @@ export default function HomePage() {
     setSelectedId(null);
   };
 
-  const handleActivateLearningPath = (pathId: string) => {
-    const def = content.learningPathDefs.find((p) => p.id === pathId);
-    if (!def) return;
-    setActivePath({ id: pathId, index: 0 });
-    setSelectedId(null);
-    setMode('explore');
-    setSelectedRoadmapId(null);
-    setTimeout(() => {
-      document.getElementById('system-map')?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
+  // Paths open as a series of lesson pages, starting at the first lesson not yet done.
+  const handleStartPath = (pathId: string) => {
+    navigate(startLessonUrl(pathId, progress));
   };
 
   const handlePathNavigate = (index: number) => {
@@ -325,36 +388,35 @@ export default function HomePage() {
 
         {/* Hero text */}
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-4 text-center">
-          <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-white/10 bg-white/[0.04] text-[10px] text-white/45 tracking-wide">
-            <span>Clarent</span>
-            <ChevronRight className="w-2.5 h-2.5" />
-            <span>AI DNA Framework</span>
-            <ChevronRight className="w-2.5 h-2.5" />
-            <span className="text-white/70">AI Systems DNA</span>
-          </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight mb-3">
-            <span className="text-white">Learn How Modern</span>{' '}
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight mb-4">
+            <span className="text-white">Understand AI.</span>{' '}
             <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 bg-clip-text text-transparent">
-              AI Systems Are Built
+              Then put it to work.
             </span>
           </h1>
-          <p className="max-w-2xl mx-auto text-base text-white/45 leading-relaxed mb-6">
-            An interactive map of the {CONCEPTS.length} core concepts behind production AI — from LLMs and RAG to agents, MCP, evaluation, and orchestration.
+          <p className="max-w-2xl mx-auto text-base sm:text-lg text-white/60 leading-relaxed mb-7">
+            Short lessons on the {CONCEPTS.length} ideas behind tools like ChatGPT and Claude, in plain English. No background needed.
           </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-10">
+            <button
+              onClick={() => handleStartPath('beginner')}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-semibold hover:from-blue-400 hover:to-cyan-400 transition-all shadow-lg shadow-blue-500/25"
+            >
+              <GraduationCap className="w-4 h-4" />
+              {progress['llms'] ? 'Continue the basics' : 'Start with the basics'}
+            </button>
+            <a
+              href="#learning-paths"
+              onClick={(e) => { e.preventDefault(); document.getElementById('learning-paths')?.scrollIntoView({ behavior: 'smooth' }); }}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-white/15 bg-white/[0.04] text-white/80 text-sm font-semibold hover:bg-white/[0.08] transition-all"
+            >
+              Choose a learning path <ChevronRight className="w-4 h-4" />
+            </a>
+          </div>
+          <p className="text-sm text-white/50 mb-3">Or start from what you want to build:</p>
 
           {/* Mode Toggle */}
           <div className="inline-flex items-center gap-1 p-1 rounded-xl border border-white/10 bg-white/[0.04]">
-            <button
-              onClick={() => handleSelectMode('explore')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                mode === 'explore'
-                  ? 'bg-white/[0.1] text-white shadow-sm'
-                  : 'text-white/45 hover:text-white/70'
-              }`}
-            >
-              <Compass className={`w-3.5 h-3.5 ${mode === 'explore' ? 'text-cyan-400' : 'text-white/30'}`} />
-              Explore
-            </button>
             <button
               onClick={() => handleSelectMode('roadmap')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
@@ -364,7 +426,18 @@ export default function HomePage() {
               }`}
             >
               <Map className={`w-3.5 h-3.5 ${mode === 'roadmap' ? 'text-blue-400' : 'text-white/30'}`} />
-              Roadmap
+              Pick a goal
+            </button>
+            <button
+              onClick={() => handleSelectMode('explore')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                mode === 'explore'
+                  ? 'bg-white/[0.1] text-white shadow-sm'
+                  : 'text-white/45 hover:text-white/70'
+              }`}
+            >
+              <Compass className={`w-3.5 h-3.5 ${mode === 'explore' ? 'text-cyan-400' : 'text-white/30'}`} />
+              Explore the whole map
             </button>
           </div>
         </div>
@@ -394,8 +467,9 @@ export default function HomePage() {
         )}
 
         {/* Interactive Map */}
+        <MobileConceptList />
         <div
-          className="relative mx-auto"
+          className="relative mx-auto hidden md:block"
           style={{ maxWidth: '1400px', height: 'calc(100vh - 200px)', minHeight: '520px', maxHeight: '760px' }}
         >
           <ConceptMap
@@ -447,34 +521,6 @@ export default function HomePage() {
         showProgressControls={(mode === 'roadmap' && selectedRoadmap !== null) || activePath !== null}
       />
 
-      {/* QUICK CONCEPT TILES */}
-      <section className="py-16 border-t border-white/[0.05]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl font-bold text-white mb-2">Key Concept Areas</h2>
-            <p className="text-white/40 text-sm">Jump directly into any cluster from the map</p>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { icon: Brain, label: 'Foundation', sub: 'LLMs, Tokens, Embeddings, Prompts', color: 'border-blue-500/30 bg-blue-500/[0.07]', ic: 'text-blue-400', id: 'llms' },
-              { icon: Search, label: 'Knowledge', sub: 'RAG, Vector DBs, Chunking, Search', color: 'border-emerald-500/30 bg-emerald-500/[0.07]', ic: 'text-emerald-400', id: 'rag' },
-              { icon: Bot, label: 'Intelligence', sub: 'Agents, MCP, Memory, Planning', color: 'border-amber-500/30 bg-amber-500/[0.07]', ic: 'text-amber-400', id: 'agents' },
-              { icon: BarChart2, label: 'Production', sub: 'APIs, Orchestration, Security', color: 'border-rose-500/30 bg-rose-500/[0.07]', ic: 'text-rose-400', id: 'deployment' },
-            ].map(({ icon: Icon, label, sub, color, ic, id }) => (
-              <button
-                key={label}
-                onClick={() => { setSelectedId(id); document.getElementById('system-map')?.scrollIntoView({ behavior: 'smooth' }); }}
-                className={`p-4 rounded-xl border ${color} hover:scale-[1.02] transition-all duration-200 text-left group`}
-              >
-                <Icon className={`w-5 h-5 ${ic} mb-2`} />
-                <div className="text-sm font-semibold text-white">{label}</div>
-                <div className="text-xs text-white/40 mt-0.5 leading-relaxed">{sub}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* LEARNING PATHS */}
       <section id="learning-paths" className="py-20 border-t border-white/[0.05]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -483,29 +529,26 @@ export default function HomePage() {
               <GraduationCap className="w-3 h-3" />
               Learning Paths
             </div>
-            <h2 className="text-3xl font-bold text-white mb-3">Learn at your level</h2>
-            <p className="text-white/40 max-w-md mx-auto text-sm">Four structured paths — click any card to activate it on the map and start learning.</p>
+            <h2 className="text-3xl font-bold text-white mb-3">Where are you starting?</h2>
+            <p className="text-white/50 max-w-lg mx-auto text-sm">Each path is a short series of lessons. Pick the one that sounds like you. Your progress is saved in this browser.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {LEARNING_PATHS.map(({ id, icon: Icon, level, label, color, border, accent, badge, topics, description }) => {
-              const isActive = activePath?.id === id;
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+            {LEARNING_PATHS.map(({ id, icon: Icon, level, label, color, border, accent, badge, topics, description }, idx) => {
               const pathDef = content.learningPathDefs.find((p) => p.id === id);
+              const totalMinutes = pathDef
+                ? pathDef.conceptIds.reduce((sum, cid) => sum + (content.conceptsMap[cid]?.estimatedMinutes ?? 0), 0)
+                : 0;
               return (
                 <button
                   key={id}
-                  onClick={() => handleActivateLearningPath(id)}
-                  className={`group p-6 rounded-2xl border ${isActive ? border.replace('/30', '/60') : border} bg-gradient-to-br ${color} hover:shadow-xl hover:shadow-black/30 transition-all duration-300 text-left relative ${isActive ? 'ring-1 ring-white/20' : ''}`}
+                  onClick={() => handleStartPath(id)}
+                  className={`group p-6 rounded-2xl border ${border} bg-gradient-to-br ${color} hover:shadow-xl hover:shadow-black/30 transition-all duration-300 text-left relative ${idx < 2 ? 'lg:col-span-3' : 'lg:col-span-2'}`}
                 >
-                  {isActive && (
-                    <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-white/15 border border-white/20 text-[9px] font-semibold text-white/70 uppercase tracking-wide">
-                      Active
-                    </div>
-                  )}
                   <div className="flex items-start justify-between mb-3">
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badge}`}>
                       <Icon className="w-3 h-3" />{level}
                     </div>
-                    {!isActive && <ChevronRight className={`w-4 h-4 ${accent} opacity-0 group-hover:opacity-100 transition-opacity`} />}
+                    <ChevronRight className={`w-4 h-4 ${accent} opacity-0 group-hover:opacity-100 transition-opacity`} />
                   </div>
                   <h3 className="text-base font-bold text-white mb-2">{label}</h3>
                   <p className="text-sm text-white/45 leading-relaxed mb-4">{description}</p>
@@ -520,9 +563,9 @@ export default function HomePage() {
                     return (
                       <div className="mt-4 pt-3 border-t border-white/[0.07]">
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs text-white/30">{pathDef.conceptIds.length} concepts</span>
+                          <span className="flex items-center gap-1 text-xs text-white/45"><Clock className="w-3 h-3" />{pathDef.conceptIds.length} lessons · about {Math.max(1, Math.round(totalMinutes / 5) * 5)} min</span>
                           <span className={`text-xs font-medium ${accent}`}>
-                            {isActive ? 'In progress →' : pct > 0 ? `${pct}% complete →` : 'Start path →'}
+                            {pct === 100 ? 'Review →' : pct > 0 ? `${pct}% done · Continue →` : 'Start →'}
                           </span>
                         </div>
                         {pct > 0 && (
@@ -543,45 +586,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* AI DNA CALLOUT */}
-      <section id="ai-dna" className="py-16 border-t border-white/[0.05]">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.07] to-cyan-500/[0.03] p-8 lg:p-12 text-center">
-            <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-blue-500/25 bg-blue-500/10 text-xs text-blue-300">
-              Two layers. One framework.
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">How This Connects to AI DNA</h2>
-            <p className="text-white/50 text-sm leading-relaxed max-w-xl mx-auto mb-3">
-              <span className="text-white font-semibold">AI DNA</span> is the framework for building domain intelligence platforms — the strategic architecture connecting knowledge, data, and AI to a specific industry or problem.
-            </p>
-            <p className="text-white/50 text-sm leading-relaxed max-w-xl mx-auto mb-8">
-              <span className="text-white font-semibold">AI Systems DNA</span> is the technical knowledge base explaining the AI components underneath — the LLMs, retrieval systems, agents, and orchestration patterns that make domain intelligence possible.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-white/10 bg-white/[0.04]">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
-                  <Brain className="w-3.5 h-3.5 text-white" />
-                </div>
-                <div className="text-left">
-                  <div className="text-[9px] text-white/35">Strategic layer</div>
-                  <div className="text-xs font-semibold text-white">AI DNA Framework</div>
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-white/20 rotate-90 sm:rotate-0" />
-              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06]">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-400 flex items-center justify-center">
-                  <Compass className="w-3.5 h-3.5 text-white" />
-                </div>
-                <div className="text-left">
-                  <div className="text-[9px] text-white/35">Technical layer</div>
-                  <div className="text-xs font-semibold text-white">AI Systems DNA</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* DEEP DIVES */}
       <section id="deep-dives" className="py-20 border-t border-white/[0.05]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -590,11 +594,14 @@ export default function HomePage() {
               <BookOpen className="w-3 h-3" />
               Featured Deep Dives
             </div>
-            <h2 className="text-3xl font-bold text-white mb-3">Go deeper on what matters</h2>
-            <p className="text-white/40 max-w-md mx-auto text-sm">Long-form technical guides written for engineers who want to actually understand how things work.</p>
+            <h2 className="text-3xl font-bold text-white mb-3">Go deeper on one topic</h2>
+            <p className="text-white/50 max-w-lg mx-auto text-sm">5–7 minute guides with a worked example and a short quiz at the end. New to AI? Start with the first three.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {articleMetas.filter((m) => !m.track).map((meta) => {
+            {(() => {
+              const all = sortDeepDives(articleMetas.filter((m) => !m.track));
+              return showAllDeepDives ? all : all.slice(0, 6);
+            })().map((meta) => {
               const { color, tag } = getCategoryStyle(meta.category);
               return (
                 <Link
@@ -615,6 +622,16 @@ export default function HomePage() {
               );
             })}
           </div>
+          {!showAllDeepDives && articleMetas.filter((m) => !m.track).length > 6 && (
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => setShowAllDeepDives(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/15 bg-white/[0.04] text-sm text-white/70 hover:text-white hover:bg-white/[0.08] transition-all"
+              >
+                Show all {articleMetas.filter((m) => !m.track).length} deep dives <ChevronRight className="w-3.5 h-3.5 rotate-90" />
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -663,6 +680,46 @@ export default function HomePage() {
 
       {/* LATEST FROM SIGNAL DESK */}
       <LatestSignalDeskStrip />
+
+      {/* AI DNA CALLOUT */}
+      <section id="ai-dna" className="py-16 border-t border-white/[0.05]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.07] to-cyan-500/[0.03] p-8 lg:p-12 text-center">
+            <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-blue-500/25 bg-blue-500/10 text-xs text-blue-300">
+              Two layers. One framework.
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">Part of Clarent's AI DNA framework</h2>
+            <p className="text-white/50 text-sm leading-relaxed max-w-xl mx-auto mb-3">
+              <span className="text-white font-semibold">AI DNA</span> is the framework for building domain intelligence platforms — the strategic architecture connecting knowledge, data, and AI to a specific industry or problem.
+            </p>
+            <p className="text-white/50 text-sm leading-relaxed max-w-xl mx-auto mb-8">
+              <span className="text-white font-semibold">AI Systems DNA</span> is the technical knowledge base explaining the AI components underneath — the LLMs, retrieval systems, agents, and orchestration patterns that make domain intelligence possible.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-white/10 bg-white/[0.04]">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
+                  <Brain className="w-3.5 h-3.5 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="text-[9px] text-white/35">Strategic layer</div>
+                  <div className="text-xs font-semibold text-white">AI DNA Framework</div>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-white/20 rotate-90 sm:rotate-0" />
+              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06]">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-400 flex items-center justify-center">
+                  <Compass className="w-3.5 h-3.5 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="text-[9px] text-white/35">Technical layer</div>
+                  <div className="text-xs font-semibold text-white">AI Systems DNA</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
 
       {/* WAITLIST */}
       <section id="waitlist" className="py-20 border-t border-white/[0.05]">
@@ -746,9 +803,11 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-4 flex-wrap justify-center">
             {[
-              { label: 'System Map', href: '/#system-map' },
               { label: 'Learning Paths', href: '/#learning-paths' },
               { label: 'Deep Dives', href: '/#deep-dives' },
+              { label: 'Labs', href: '/labs' },
+              { label: 'System Map', href: '/#system-map' },
+              { label: 'Signal Desk', href: '/signal-desk' },
               { label: 'AI DNA', href: '/#ai-dna' },
               { label: 'Contact', href: '/contact' },
               { label: 'Privacy', href: '/privacy' },

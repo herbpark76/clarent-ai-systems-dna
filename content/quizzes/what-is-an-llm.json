@@ -1,0 +1,49 @@
+{
+  "slug": "what-is-an-llm",
+  "questions": [
+    {
+      "question": "At its core, how does an LLM write an answer?",
+      "options": [
+        "It looks the answer up in a database of facts",
+        "It predicts the next piece of text, over and over, until the answer is done",
+        "It copies the closest matching web page",
+        "It runs a separate program written for each type of question"
+      ],
+      "answer": 1,
+      "explanation": "An LLM generates text one token at a time by predicting what comes next. Doing that well is what lets it write, summarize and reason."
+    },
+    {
+      "question": "Why can an LLM give a confident answer that is wrong?",
+      "options": [
+        "It is designed to mislead users",
+        "It only works when connected to the internet",
+        "It produces text that sounds right based on patterns, and it sounds just as sure when the details are wrong",
+        "It always has a bug in its first answer"
+      ],
+      "answer": 2,
+      "explanation": "The model doesn't check facts. It writes plausible text, and the tone is the same whether the details are right or wrong. These errors are often called hallucinations."
+    },
+    {
+      "question": "You want an accurate answer about your company's travel policy. What helps most?",
+      "options": [
+        "Ask the question twice",
+        "Use a longer, more polite question",
+        "Paste in the policy and ask the model to quote the sections it relies on",
+        "Tell the model it is an expert"
+      ],
+      "answer": 2,
+      "explanation": "The model has never seen your private documents. Giving it the source, and asking it to point to where its answer came from, makes the answer grounded and easy to check."
+    },
+    {
+      "question": "What does fine-tuning add after pre-training?",
+      "options": [
+        "Knowledge of events after the training cutoff",
+        "Access to your company files",
+        "The ability to follow instructions and act as a helpful assistant",
+        "A larger context window"
+      ],
+      "answer": 2,
+      "explanation": "Pre-training teaches language and general knowledge. Fine-tuning, including feedback from people, teaches the model to follow instructions, answer directly and decline harmful requests."
+    }
+  ]
+}

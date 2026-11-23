@@ -171,12 +171,15 @@ export async function fetchPublishedByType(type: EntryType): Promise<SignalEntry
   return (data || []) as SignalEntry[];
 }
 
-export async function fetchLatestPublished(limit: number = 6): Promise<SignalEntry[]> {
-  const { data, error } = await supabase
+export async function fetchLatestPublished(limit: number = 6, aiOnly: boolean = false): Promise<SignalEntry[]> {
+  let query = supabase
     .from('signal_desk_entries')
     .select('*')
     .eq('status', 'published')
-    .in('duplicate_status', VISIBLE_STATUSES)
+    .in('duplicate_status', VISIBLE_STATUSES);
+  // aiOnly skips entries with no system layer (shown as "Industry"), e.g. general tech or business news
+  if (aiOnly) query = query.not('system_layer', 'is', null);
+  const { data, error } = await query
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -190,6 +193,7 @@ export async function fetchLatestByConcept(conceptId: string, limit: number = 3)
     .eq('status', 'published')
     .in('duplicate_status', VISIBLE_STATUSES)
     .filter('concepts', 'cs', `{${conceptId}}`)
+    .not('system_layer', 'is', null) // skip general "Industry" news on lesson pages
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;

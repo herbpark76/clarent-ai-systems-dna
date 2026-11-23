@@ -51,7 +51,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['tokens', 'context-windows', 'embeddings', 'prompt-engineering'],
     relatedTech: ['GPT (OpenAI)', 'Claude (Anthropic)', 'Gemini (Google)', 'Llama (Meta)', 'Mistral'],
     highlightGroup: ['tokens', 'context-windows', 'embeddings', 'prompt-engineering'],
-    estimatedMinutes: 20,
+    estimatedMinutes: 9,
   },
   {
     id: 'tokens',
@@ -72,7 +72,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['context-windows'],
     relatedTech: ['tiktoken', 'SentencePiece', 'BPE', 'WordPiece'],
     highlightGroup: ['llms', 'context-windows'],
-    estimatedMinutes: 10,
+    estimatedMinutes: 8,
   },
   {
     id: 'context-windows',
@@ -93,7 +93,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['rag', 'memory'],
     relatedTech: ['Long-context models', 'Prompt caching', 'Context compaction'],
     highlightGroup: ['llms', 'tokens', 'rag', 'memory'],
-    estimatedMinutes: 12,
+    estimatedMinutes: 8,
   },
   {
     id: 'embeddings',
@@ -114,7 +114,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['vector-databases', 'chunking', 'knowledge-graphs'],
     relatedTech: ['OpenAI Embeddings', 'Cohere Embed', 'Voyage AI', 'BGE', 'Nomic', 'Jina'],
     highlightGroup: ['llms', 'vector-databases', 'chunking', 'knowledge-graphs'],
-    estimatedMinutes: 15,
+    estimatedMinutes: 9,
   },
   {
     id: 'prompt-engineering',
@@ -135,7 +135,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['rag', 'agents', 'evaluation'],
     relatedTech: ['Chain-of-thought', 'Few-shot', 'System prompts', 'DSPy', 'OPRO'],
     highlightGroup: ['llms', 'rag', 'agents', 'evaluation'],
-    estimatedMinutes: 18,
+    estimatedMinutes: 10,
   },
 
   // ── KNOWLEDGE ───────────────────────────────────────────
@@ -158,7 +158,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['rag', 'search', 'memory'],
     relatedTech: ['Pinecone', 'Weaviate', 'Qdrant', 'pgvector', 'Chroma', 'Milvus'],
     highlightGroup: ['embeddings', 'rag', 'search', 'memory'],
-    estimatedMinutes: 15,
+    estimatedMinutes: 8,
   },
   {
     id: 'knowledge-graphs',
@@ -179,7 +179,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['rag'],
     relatedTech: ['Neo4j', 'Wikidata', 'Amazon Neptune', 'GraphRAG', 'FalkorDB'],
     highlightGroup: ['embeddings', 'rag'],
-    estimatedMinutes: 14,
+    estimatedMinutes: 8,
   },
   {
     id: 'rag',
@@ -200,7 +200,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['agents', 'orchestration'],
     relatedTech: ['LlamaIndex', 'LangChain', 'Haystack', 'Ragas'],
     highlightGroup: ['embeddings', 'vector-databases', 'chunking', 'prompt-engineering', 'llms', 'search'],
-    estimatedMinutes: 20,
+    estimatedMinutes: 8,
   },
   {
     id: 'chunking',
@@ -221,7 +221,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['rag', 'metadata'],
     relatedTech: ['Recursive splitter', 'Semantic chunking', 'Token-based', 'LlamaIndex'],
     highlightGroup: ['embeddings', 'rag', 'metadata'],
-    estimatedMinutes: 12,
+    estimatedMinutes: 9,
   },
   {
     id: 'metadata',
@@ -242,7 +242,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['search'],
     relatedTech: ['Structured extraction', 'Filter schemas', 'Weaviate filters', 'pgvector'],
     highlightGroup: ['chunking', 'search', 'rag'],
-    estimatedMinutes: 10,
+    estimatedMinutes: 3,
   },
   {
     id: 'search',
@@ -263,7 +263,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['rag', 'tool-calling'],
     relatedTech: ['BM25', 'Hybrid search', 'Reranking', 'Cohere Rerank', 'Elasticsearch'],
     highlightGroup: ['vector-databases', 'metadata', 'rag', 'tool-calling'],
-    estimatedMinutes: 14,
+    estimatedMinutes: 3,
   },
 
   // ── INTELLIGENCE ────────────────────────────────────────
@@ -286,7 +286,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['agents', 'mcp'],
     relatedTech: ['OpenAI function calling', 'Anthropic tool use', 'Gemini tools', 'JSON Schema'],
     highlightGroup: ['llms', 'prompt-engineering', 'agents', 'mcp'],
-    estimatedMinutes: 15,
+    estimatedMinutes: 8,
   },
   {
     id: 'mcp',
@@ -307,7 +307,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['agents', 'apis'],
     relatedTech: ['MCP spec', 'MCP servers', 'MCP SDKs', 'Claude, ChatGPT & IDE clients'],
     highlightGroup: ['tool-calling', 'agents', 'apis'],
-    estimatedMinutes: 12,
+    estimatedMinutes: 7,
   },
   {
     id: 'agents',
@@ -328,7 +328,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['multi-agent-systems', 'memory', 'planning', 'orchestration'],
     relatedTech: ['LangGraph', 'AutoGen', 'CrewAI', 'Pydantic AI', 'OpenAI Agents SDK', 'Claude Agent SDK'],
     highlightGroup: ['tool-calling', 'mcp', 'memory', 'planning', 'evaluation'],
-    estimatedMinutes: 22,
+    estimatedMinutes: 8,
   },
   {
     id: 'multi-agent-systems',
@@ -349,7 +349,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['orchestration'],
     relatedTech: ['AutoGen', 'CrewAI', 'MetaGPT', 'LangGraph', 'OpenAI Agents SDK'],
     highlightGroup: ['agents', 'planning', 'orchestration'],
-    estimatedMinutes: 18,
+    estimatedMinutes: 3,
   },
   {
     id: 'memory',
@@ -370,7 +370,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['planning'],
     relatedTech: ['Zep', 'Letta (MemGPT)', 'LangChain memory', 'Redis', 'mem0'],
     highlightGroup: ['agents', 'vector-databases', 'planning'],
-    estimatedMinutes: 14,
+    estimatedMinutes: 10,
   },
   {
     id: 'planning',
@@ -391,7 +391,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['multi-agent-systems'],
     relatedTech: ['ReAct', 'Chain-of-thought', 'Tree-of-thought', 'LATS', 'MCTS'],
     highlightGroup: ['agents', 'memory', 'multi-agent-systems'],
-    estimatedMinutes: 15,
+    estimatedMinutes: 3,
   },
   {
     id: 'evaluation',
@@ -412,7 +412,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['guardrails', 'monitoring'],
     relatedTech: ['RAGAS', 'TruLens', 'DeepEval', 'LangSmith', 'Braintrust', 'Evals'],
     highlightGroup: ['agents', 'guardrails', 'monitoring'],
-    estimatedMinutes: 20,
+    estimatedMinutes: 9,
   },
   {
     id: 'guardrails',
@@ -433,7 +433,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['security', 'deployment'],
     relatedTech: ['Guardrails AI', 'NeMo Guardrails', 'LlamaGuard', 'Constitutional AI', 'Azure Content Safety'],
     highlightGroup: ['evaluation', 'security', 'deployment'],
-    estimatedMinutes: 14,
+    estimatedMinutes: 10,
   },
 
   // ── PRODUCTION ──────────────────────────────────────────
@@ -456,7 +456,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['orchestration', 'deployment'],
     relatedTech: ['OpenAI API', 'Anthropic API', 'FastAPI', 'REST', 'GraphQL', 'gRPC'],
     highlightGroup: ['llms', 'mcp', 'orchestration'],
-    estimatedMinutes: 12,
+    estimatedMinutes: 3,
   },
   {
     id: 'orchestration',
@@ -477,7 +477,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['deployment', 'monitoring'],
     relatedTech: ['LangGraph', 'Temporal', 'Prefect', 'Airflow', 'Dify', 'Flowise'],
     highlightGroup: ['agents', 'apis', 'monitoring', 'deployment'],
-    estimatedMinutes: 16,
+    estimatedMinutes: 3,
   },
   {
     id: 'monitoring',
@@ -498,7 +498,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['security'],
     relatedTech: ['LangSmith', 'Helicone', 'Weights & Biases', 'Datadog', 'OpenTelemetry'],
     highlightGroup: ['evaluation', 'orchestration', 'security'],
-    estimatedMinutes: 14,
+    estimatedMinutes: 3,
   },
   {
     id: 'security',
@@ -519,7 +519,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: ['deployment'],
     relatedTech: ['OWASP LLM Top 10', 'LlamaGuard', 'Azure AI Content Safety', 'Prompt injection defense'],
     highlightGroup: ['guardrails', 'monitoring', 'deployment'],
-    estimatedMinutes: 15,
+    estimatedMinutes: 3,
   },
   {
     id: 'deployment',
@@ -540,7 +540,7 @@ export const CONCEPTS: Concept[] = [
     unlocksNext: [],
     relatedTech: ['Modal', 'Replicate', 'AWS Bedrock', 'Vercel AI', 'Docker', 'Kubernetes'],
     highlightGroup: ['apis', 'orchestration', 'security', 'monitoring'],
-    estimatedMinutes: 14,
+    estimatedMinutes: 3,
   },
 ];
 
