@@ -177,7 +177,7 @@ function RecommendationCard({ entries }: { entries: SignalEntry[] }) {
       </div>
       {mainBenchmark && (
         <p className="text-[11px] text-white/45 mt-2">
-          "Highest score" and "Best value" compare only models with a {mainBenchmark} score ({withScores.length} of {entries.length}). Scores from different benchmarks can't be compared. New to model pricing? See <Link to="/concepts/tokens" className="text-cyan-400/80 hover:text-cyan-300">what tokens are</Link>.
+          "Highest score" and "Best value" compare only the {withScores.length} of {entries.length} models scored on the {mainBenchmark}. Scores from different benchmarks can't be compared. New to model pricing? See <Link to="/concepts/tokens" className="text-cyan-400/80 hover:text-cyan-300">what tokens are</Link>.
         </p>
       )}
     </div>
